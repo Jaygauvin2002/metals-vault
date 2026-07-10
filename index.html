@@ -278,8 +278,8 @@
       radial-gradient(120% 60% at 100% 0%, #12203f 0%, rgba(18,32,63,0) 55%),
       radial-gradient(120% 60% at 0% 0%, #1a1330 0%, rgba(26,19,48,0) 50%),
       #05070f}
-    #app{max-width:1200px;height:100dvh;display:grid;
-      grid-template-columns:240px 1fr;grid-template-rows:auto 1fr;
+    #app{max-width:1900px;height:100dvh;display:grid;
+      grid-template-columns:250px 1fr;grid-template-rows:auto 1fr;
       grid-template-areas:"top top" "nav main";
       border-left:1px solid var(--line);border-right:1px solid var(--line);
       box-shadow:0 0 80px rgba(0,0,0,.5)}
@@ -297,18 +297,22 @@
     nav.tabs button.active{background:var(--surf2);color:var(--tx)}
     nav.tabs button.active .ic{transform:none}
     nav.tabs button.active::before{display:none}
-    /* Aperçu : colonne centrée, tableau de bord 2 colonnes */
-    #view-home{max-width:1000px;margin:0 auto}
+    /* Aperçu : tableau de bord 2 colonnes qui remplit la largeur */
+    #view-home{max-width:1500px;margin:0 auto}
     #homeData{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;align-items:start}
     #homeData>.stat-grid{grid-column:1/-1;grid-template-columns:repeat(4,1fr)}
     #homeData>.wide{grid-column:1/-1}
     #homeData>.hcol{min-width:0}
     .hero .total{font-size:46px}
     /* autres vues : largeur de lecture confortable, centrée */
-    #view-pos,#view-hist,#view-alerts,#view-set,#view-panama{max-width:860px;margin:0 auto}
+    #view-pos,#view-hist,#view-alerts,#view-set,#view-panama{max-width:1040px;margin:0 auto}
     .iconbtn:hover,.chip:hover{border-color:var(--line2)}
   }
-  @media(min-width:1280px){ #app{max-width:1320px;grid-template-columns:260px 1fr} }
+  /* très grands écrans : dashboard 3 colonnes (répartition | performance | stats verticales) */
+  @media(min-width:1500px){
+    #view-home{max-width:1640px}
+    #homeData{grid-template-columns:1.1fr 1.1fr;column-gap:22px}
+  }
 </style>
 </head>
 <body>
