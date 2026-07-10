@@ -241,6 +241,21 @@
   .calc{font-size:12.5px;color:var(--mut);background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:14px}
   .calc b{color:var(--tx)}
 
+  /* ---- Panama ---- */
+  .card.pana{border-color:rgba(58,214,160,.42);background:linear-gradient(180deg,rgba(58,214,160,.11),rgba(11,16,32,.55))}
+  .pana-hero{text-align:center;padding:20px 16px}
+  .pana-hero .lbl{font-size:14px;color:var(--up);font-weight:700}
+  .pana-hero .amt{font-size:clamp(32px,9vw,42px);font-weight:800;color:var(--up);margin:8px 0 4px;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+  .pana-hero .sub{font-size:12.5px;color:var(--mut)}
+  .pana-cmp{display:grid;grid-template-columns:1fr 1fr}
+  .pana-cmp .c{padding:15px 12px;text-align:center}
+  .pana-cmp .c:first-child{border-right:1px solid var(--line)}
+  .pana-cmp .c .k{font-size:12.5px;color:var(--mut)}
+  .pana-cmp .c .v{font-size:22px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
+  .check{display:flex;gap:11px;padding:9px 0;font-size:14px;align-items:flex-start;border-bottom:1px solid var(--line)}
+  .check:last-child{border-bottom:0}
+  .check .mk{color:var(--up);font-weight:800;flex:0 0 auto}
+
   .set-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line)}
   .set-row:last-child{border-bottom:0}
   .set-row .mid{flex:1;min-width:0}
@@ -313,6 +328,31 @@
       <div id="histStats"></div>
     </section>
 
+    <!-- ============ PANAMA ============ -->
+    <section class="view" id="view-panama">
+      <h2 class="sec">Optimisation fiscale <span class="hint">Québec vs Panama</span></h2>
+      <div class="card pana pana-hero">
+        <div class="lbl">🇵🇦 Économie fiscale estimée en vendant au Panama</div>
+        <div class="amt tnum" id="panaSave">—</div>
+        <div class="sub" id="panaSaveSub"></div>
+      </div>
+      <div class="card" style="padding:0">
+        <div class="pana-cmp">
+          <div class="c"><div class="k">Impôt si vente au Québec</div><div class="v" id="panaQc" style="color:var(--down)">—</div></div>
+          <div class="c"><div class="k">Impôt si vente au Panama</div><div class="v" id="panaPa" style="color:var(--up)">0 $</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="set-row" style="border:0;padding:6px 4px">
+          <div class="mid"><div class="t">Taux d'impôt sur le gain (Québec)</div><div class="d">Plus-value imposable : <b id="panaGain">—</b></div></div>
+          <div style="display:flex;align-items:center;gap:6px;flex:0 0 auto"><input id="panaRate" type="number" inputmode="decimal" step="0.1" style="width:76px;padding:9px 10px;border-radius:11px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);text-align:right"><span class="muted">%</span></div>
+        </div>
+      </div>
+      <h2 class="sec">Checklist relocalisation</h2>
+      <div class="card" id="panaCheck"></div>
+      <p class="center muted" style="font-size:12px;margin:14px 0 4px">Estimations indicatives — validez avec un fiscaliste avant de vendre. Le Panama applique une fiscalité territoriale : l'exonération sur le gain dépend de votre statut de résident.</p>
+    </section>
+
     <!-- ============ ALERTES ============ -->
     <section class="view" id="view-alerts">
       <h2 class="sec">Alertes de prix</h2>
@@ -345,6 +385,7 @@
     <button data-tab="home" class="active"><span class="ic">◈</span>Aperçu</button>
     <button data-tab="pos"><span class="ic">▤</span>Positions</button>
     <button data-tab="hist"><span class="ic">📈</span>Historique</button>
+    <button data-tab="panama"><span class="ic">🇵🇦</span>Panama</button>
     <button data-tab="alerts"><span class="ic">🔔</span>Alertes</button>
     <button data-tab="set"><span class="ic">⚙</span>Réglages</button>
   </nav>
@@ -397,7 +438,15 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency' };
+const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
+const PANA_CHECK=[
+  "Déclarer à l'ASFC si transport de +10 000 $ CAD",
+  "Formulaire BSF407 avant le départ (preuve de possession)",
+  "Garder les factures de chaque pièce/lingot",
+  "Zéro droit d'importation au Panama (zone franche)",
+  "Zéro impôt sur le gain une fois résident",
+  "Vaults : Fort Kobbe, dealers à Panama City"
+];
 const COPPER_LB_PER_OZT = 14.5833;
 const METALS = {
   XAU:{ name:'Or', ab:'Au', div:1, c:'#e0b445' },
@@ -420,9 +469,11 @@ const state = {
   investments: load(K.inv,[]),
   alerts: load(K.al,[]),
   snapshots: load(K.snap,[]),
+  taxRate: load(K.tax,10.5),
   lastFetch: 0,
   online: navigator.onLine,
 };
+if(typeof state.taxRate!=='number'||!isFinite(state.taxRate)||state.taxRate<0) state.taxRate=10.5;
 if(typeof state.currency!=='string') state.currency='CAD';
 if(!Array.isArray(state.investments)) state.investments=[];
 if(!Array.isArray(state.alerts)) state.alerts=[];
@@ -534,7 +585,18 @@ function notifyAlert(a,price){
 /* ============================================================
    RENDER
    ============================================================ */
-function renderAll(){ renderHome(); renderPositions(); renderHistory(); renderAlerts(); renderSettings(); }
+function renderAll(){ renderHome(); renderPositions(); renderHistory(); renderPanama(); renderAlerts(); renderSettings(); }
+
+function renderPanama(){
+  const p=portfolio(), gain=Math.max(0,p.pnl), rate=state.taxRate;
+  const qc=gain*rate/100, save=qc; // Panama = 0
+  $('#panaSave').textContent=fmtMoney(save);
+  $('#panaSaveSub').textContent=`vs forfait ${fmtNum(rate, rate%1?1:0)} % sur le gain si vendu au Québec`;
+  $('#panaQc').textContent=(qc>0?'−':'')+fmtMoney(qc);
+  $('#panaGain').textContent=fmtMoney(gain);
+  const inp=$('#panaRate'); if(document.activeElement!==inp) inp.value=rate;
+  $('#panaCheck').innerHTML=PANA_CHECK.map(t=>`<div class="check"><span class="mk">✓</span><span>${escapeHtml(t)}</span></div>`).join('');
+}
 
 function setStatus(kind){
   const chip=$('#statusChip'), txt=$('#statusText'); chip.classList.remove('stale','off');
@@ -899,6 +961,7 @@ $$('#seriesSeg button').forEach(b=>b.addEventListener('click',()=>{ histSeries=b
 
 /* ---- actions ---- */
 $('#addBtn').addEventListener('click',()=>openPosSheet(null));
+$('#panaRate').addEventListener('input',e=>{ let v=parseFloat(e.target.value); if(!isFinite(v)||v<0) v=0; if(v>100) v=100; state.taxRate=v; save(K.tax,v); renderPanama(); });
 $('#addBtn2').addEventListener('click',()=>openPosSheet(null));
 $('#addAlertBtn').addEventListener('click',openAlertSheet);
 $('#refreshBtn').addEventListener('click',()=>refresh(false));
@@ -909,7 +972,7 @@ $('#notifBtn').addEventListener('click',async()=>{ if(!('Notification' in window
 function download(fn,text,mime){ const b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement('a');
   a.href=u; a.download=fn; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(u); a.remove(); },500); }
 function stamp(){ return new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); }
-$('#expJson').addEventListener('click',()=>{ const data={app:'metals-vault',version:1,exportedAt:new Date().toISOString(),currency:state.currency,
+$('#expJson').addEventListener('click',()=>{ const data={app:'metals-vault',version:1,exportedAt:new Date().toISOString(),currency:state.currency,taxRate:state.taxRate,
   investments:state.investments,alerts:state.alerts,snapshots:state.snapshots,lastPrices:state.prices};
   download(`metals-vault-${stamp()}.json`,JSON.stringify(data,null,2),'application/json'); toast('Sauvegarde JSON exportée','ok'); });
 $('#expCsv').addEventListener('click',()=>{ if(!state.investments.length){ toast('Aucune position à exporter','err'); return; }
@@ -927,6 +990,7 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
       state.alerts=al.map(a=>({ id:a.id||uid(), metal:METALS[a.metal]?a.metal:'XAU', dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, createdAt:a.createdAt||Date.now() }));
       state.snapshots=sn.filter(s=>s&&isFinite(s.v)&&s.t).map(s=>({t:s.t,v:+s.v,p:s.p&&typeof s.p==='object'?s.p:undefined}));
       if(d.currency&&CURRENCIES.includes(d.currency)) state.currency=d.currency;
+      if(typeof d.taxRate==='number'&&isFinite(d.taxRate)&&d.taxRate>=0){ state.taxRate=d.taxRate; save(K.tax,d.taxRate); }
       save(K.inv,state.investments); save(K.al,state.alerts); save(K.snap,state.snapshots); save(K.cur,state.currency);
       renderAll(); toast('Sauvegarde importée','ok'); });
   }catch(err){ toast('Fichier JSON invalide','err'); } finally{ e.target.value=''; } };
