@@ -1134,7 +1134,8 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 window.addEventListener('online',()=>{ state.online=true; refresh(true); });
 window.addEventListener('offline',()=>{ state.online=false; setStatus('off'); });
 window.addEventListener('resize',()=>{ if($('#view-hist').classList.contains('active')) renderHistory(); });
-setInterval(()=>{ if(document.visibilityState==='visible'&&Date.now()-state.lastFetch>120000) refresh(true); },60000);
+// rafraîchissement automatique des prix ~toutes les 60 s tant que l'app est visible
+setInterval(()=>{ if(document.visibilityState==='visible'&&navigator.onLine&&Date.now()-state.lastFetch>60000) refresh(true); },20000);
 setInterval(()=>{ const c=$('#statusChip'); if(!refreshing&&c&&!c.classList.contains('off')&&!c.classList.contains('stale')) setStatus('ok'); },30000);
 
 /* ---- boot ---- */
