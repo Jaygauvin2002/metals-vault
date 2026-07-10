@@ -352,9 +352,9 @@
     <header class="top">
       <div class="brand"><span class="logo"></span><div>Metals&nbsp;Vault<small>Or · Argent · Cuivre</small></div></div>
       <span class="spacer"></span>
-      <button class="chip" id="curBtn" title="Changer de devise"><span id="curLabel">CAD</span> ⇄</button>
-      <button class="iconbtn" id="addBtn" title="Ajouter une position">＋</button>
-      <button class="iconbtn" id="refreshBtn" title="Rafraîchir">↻</button>
+      <button class="chip" id="curBtn" title="Changer de devise" aria-label="Changer de devise"><span id="curLabel">CAD</span> ⇄</button>
+      <button class="iconbtn" id="addBtn" title="Ajouter une position (N)" aria-label="Ajouter une position">＋</button>
+      <button class="iconbtn" id="refreshBtn" title="Rafraîchir (R)" aria-label="Rafraîchir les prix">↻</button>
     </header>
     <div style="padding:0 16px;margin:-4px 0 2px"><span class="status" id="statusChip"><span class="dot"></span><span id="statusText">—</span></span></div>
   </div>
@@ -386,6 +386,7 @@
     <!-- ============ POSITIONS ============ -->
     <section class="view" id="view-pos">
       <h2 class="sec">Mes positions <span class="hint" id="posCount"></span></h2>
+      <div class="chips" id="posFilter" style="margin-bottom:10px"></div>
       <div class="card" id="posCard"></div>
       <button class="btn primary" id="addBtn2" style="margin-top:4px">+ Ajouter une position</button>
     </section>
@@ -454,6 +455,12 @@
           <select id="curSelect" style="width:auto;padding:9px 12px;border-radius:11px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx)"></select></div>
         <div class="set-row"><div class="mid"><div class="t">Notifications d'alertes</div><div class="d" id="notifDesc">Recevoir une alerte quand un seuil est atteint.</div></div><button class="btn sm" id="notifBtn">Activer</button></div>
       </div>
+      <h2 class="sec">Raccourcis clavier</h2>
+      <div class="card"><div class="muted" style="font-size:13px;line-height:2">
+        <b style="color:var(--tx)">1–6</b> changer d'onglet · <b style="color:var(--tx)">N</b> nouvelle position · <b style="color:var(--tx)">R</b> rafraîchir<br>
+        <b style="color:var(--tx)">Échap</b> fermer une fenêtre · <b style="color:var(--tx)">Entrée</b> valider
+      </div></div>
+
       <h2 class="sec">Zone de danger</h2>
       <div class="card"><div class="set-row"><div class="mid"><div class="t">Tout effacer</div><div class="d">Supprime positions, alertes et historique. Irréversible.</div></div><button class="btn sm danger" id="wipeBtn">Effacer</button></div></div>
       <p class="center muted" style="font-size:12px;margin:20px 0 4px" id="aboutLine"></p>
@@ -895,11 +902,17 @@ function donutSvg(segs,total){
   return `<svg viewBox="0 0 132 132" width="132" height="132" style="transform:rotate(-90deg)">${parts}</svg>`;
 }
 
+let posFilter='all';
 function renderPositions(){
   $('#posCount').textContent = state.investments.length?state.investments.length+' opération(s)':'';
-  const card=$('#posCard');
-  if(!state.investments.length){ card.innerHTML=emptyBlock('▤','Aucune position','Touchez « + » pour ajouter votre premier achat.'); return; }
-  const sorted=[...state.investments].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const card=$('#posCard'), fc=$('#posFilter');
+  if(!state.investments.length){ if(fc) fc.innerHTML=''; card.innerHTML=emptyBlock('▤','Aucune position','Touchez « + » pour ajouter votre premier achat.'); return; }
+  const present=METAL_ORDER.filter(m=>state.investments.some(p=>p.metal===m));
+  if(posFilter!=='all'&&!present.includes(posFilter)) posFilter='all';
+  if(fc){ fc.innerHTML = present.length>1 ? [{k:'all',lbl:'Tout'}].concat(present.map(m=>({k:m,lbl:METALS[m].name}))).map(c=>`<button data-k="${c.k}" class="${c.k===posFilter?'on':''}">${c.lbl}</button>`).join('') : '';
+    $$('#posFilter button').forEach(b=>b.addEventListener('click',()=>{ posFilter=b.dataset.k; renderPositions(); })); }
+  let sorted=[...state.investments]; if(posFilter!=='all') sorted=sorted.filter(p=>p.metal===posFilter);
+  sorted.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   card.innerHTML='';
   for(const p of sorted){
     const m=p.metal, price=spotUsd(m), q=+p.qty||0;
