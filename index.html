@@ -691,6 +691,15 @@ function renderAll(){ renderHome(); renderPositions(); renderHistory(); renderPa
 
 /* ---- signal d'achat basé sur le RATIO OR/ARGENT (prix or vs prix argent) ---- */
 function gsrCurrent(){ const g=spotUsd('XAU'),s=spotUsd('XAG'); return (g>0&&s>0)?g/s:null; }
+function ratioSpark(){
+  const pts=state.snapshots.filter(s=>s.p&&s.p.XAU>0&&s.p.XAG>0).slice(-40).map(s=>s.p.XAU/s.p.XAG);
+  if(pts.length<3) return '';
+  const W=100,H=30,min=Math.min(...pts),max=Math.max(...pts),sp=(max-min)||1,n=pts.length;
+  const up=pts[n-1]>=pts[0], col=up?'#3ad6a0':'#ff6f78';
+  let d=''; pts.forEach((v,i)=>{ d+=(i?'L':'M')+(i*W/(n-1)).toFixed(1)+' '+(H-3-(v-min)/sp*(H-6)).toFixed(1)+' '; });
+  return `<div style="margin-top:14px"><div class="muted" style="font-size:11px;margin-bottom:4px">Tendance récente du ratio (${pts.length} j) — <b style="color:${col}">${up?'en hausse':'en baisse'}</b></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:34px;display:block"><path d="${d}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round"/></svg></div>`;
+}
 function renderBuySignal(){
   const host=$('#buySignal'); if(!host) return;
   const g=spotUsd('XAU'), s=spotUsd('XAG');
@@ -723,6 +732,7 @@ function renderBuySignal(){
       <div class="muted" style="font-size:12.5px;margin-top:2px">1&nbsp;oz d'or = <b style="color:var(--tx)">${gsr.toFixed(1)} oz d'argent</b> au cours actuel · Or ${fmtMoney(g,{digits:0})} / Argent ${fmtMoney(s,{digits:2})}</div>
       <div class="gsr-gauge"><span class="mk" style="left:${pos}%"></span></div>
       <div class="gsr-scale"><span>← Or bon marché</span><span>60</span><span>80</span><span>Argent bon marché →</span></div>
+      ${ratioSpark()}
       <div class="muted" style="font-size:11px;margin-top:14px">Ratio = prix de l'or ÷ prix de l'argent. Élevé (≥80) → l'argent est historiquement bon marché ; bas (≤60) → c'est l'or. Analyse indicative — <b>pas un conseil financier</b>.</div>
     </div>`;
 }
@@ -937,7 +947,7 @@ function renderHistory(){
   let pts=seriesPoints().filter(p=>p.t>=cutoff);
   const isVal=histSeries==='value', isRatio=histSeries==='RATIO';
   $('#histHint').textContent = isVal?'valeur du portefeuille':isRatio?'ratio or/argent':'cours '+METALS[histSeries].name.toLowerCase();
-  drawChart($('#chartWrap'), pts, {value:isVal, kind:isRatio?'ratio':'money'});
+  drawChart($('#chartWrap'), pts, {value:isVal, kind:isRatio?'ratio':'money', refs:isRatio?[60,80]:null});
   renderHistStats(pts, isVal, isRatio);
 }
 function renderHistStats(pts, isVal, isRatio){
@@ -979,9 +989,12 @@ function drawChart(host, pts, opts){
     grid+=`<text x="${L-6}" y="${(+py+3.5).toFixed(1)}" text-anchor="end" fill="#6b7794" font-size="10">${fmtA(yy)}</text>`; }
   const xl=`<text x="${L}" y="${H-6}" fill="#6b7794" font-size="10">${fmtDate(xmin)}</text>
             <text x="${W-R}" y="${H-6}" text-anchor="end" fill="#6b7794" font-size="10">${fmtDate(xmax,true)}</text>`;
+  let refs='';
+  if(opts.refs) for(const rv of opts.refs){ if(rv>ymin&&rv<ymax){ const ry=Y(rv).toFixed(1);
+    refs+=`<line x1="${L}" y1="${ry}" x2="${W-R}" y2="${ry}" stroke="#6ea8ff" stroke-opacity=".45" stroke-width="1" stroke-dasharray="4 4"/><text x="${W-R}" y="${(+ry-3).toFixed(1)}" text-anchor="end" fill="#6ea8ff" font-size="9">${fmtA(rv)}</text>`; } }
   host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
     <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".26"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
-    ${grid}<path d="${area}" fill="url(#cg)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${grid}${refs}<path d="${area}" fill="url(#cg)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
     ${xl}<g id="cg-hover" style="opacity:0"><line id="cg-line" y1="${T}" y2="${H-B}" stroke="${col}" stroke-width="1" stroke-dasharray="3 3"/><circle id="cg-dot" r="4" fill="${col}" stroke="#0b1020" stroke-width="2"/></g>
   </svg><div class="chart-tip" id="cg-tip"></div>`;
   // interactivity
@@ -1108,6 +1121,7 @@ function openPosSheet(id){
     $('#fQty').value=''; $('#fPrice').value=''; $('#fPrem').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
   }
   updatePosUI(); openSheet($('#posSheet'));
+  if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
 }
 $('#savePos').addEventListener('click',()=>{
   const e=readPosInputs();
@@ -1135,7 +1149,8 @@ function updateACalc(){ const ratio=aMetal==='RATIO', cur=alertSpot(aMetal),tgt=
   let html=cur>0?`Actuel : <b>${ratio?fmtNum(cur,1):fmtMoney(cur)}</b>`:'Valeur indisponible';
   if(tgt>0&&cur>0){ const d=(tgt-cur)/cur*100; html+=` · Seuil ${d>=0?'+':''}${fmtNum(d,1)}% vs actuel`; }
   $('#aCalc').innerHTML=html; }
-function openAlertSheet(){ aMetal='XAU'; aDir='above'; setASeg($('#aMetalSeg'),'XAU','m'); setASeg($('#aDirSeg'),'above','d'); $('#aTarget').value=''; updateACalc(); openSheet($('#alertSheet')); }
+function openAlertSheet(){ aMetal='XAU'; aDir='above'; setASeg($('#aMetalSeg'),'XAU','m'); setASeg($('#aDirSeg'),'above','d'); $('#aTarget').value=''; updateACalc(); openSheet($('#alertSheet'));
+  if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#aTarget').focus(); }catch(e){} },330); }
 $('#saveAlert').addEventListener('click',()=>{ const tgt=+$('#aTarget').value; if(!(tgt>0)){ toast('Entrez un seuil valide','err'); return; }
   const price=alertSpot(aMetal), met=price>0?(aDir==='above'?price>=tgt:price<=tgt):false;
   state.alerts.push({ id:uid(), metal:aMetal, dir:aDir, target:tgt, triggered:met, createdAt:Date.now() });
@@ -1168,6 +1183,22 @@ function switchTab(name){
 }
 $$('nav.tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 $$('#seriesSeg button').forEach(b=>b.addEventListener('click',()=>{ histSeries=b.dataset.s; renderHistory(); }));
+
+/* ---- raccourcis clavier (bureau) ---- */
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape'){ if(openSheetEl){ e.preventDefault(); closeSheet(); } return; }
+  if(openSheetEl){
+    if(e.key==='Enter'&&!e.shiftKey){ const map={posSheet:'#savePos',alertSheet:'#saveAlert',confirmSheet:'#cfOk'}, sel=map[openSheetEl.id];
+      if(sel){ e.preventDefault(); $(sel).click(); } }
+    return;
+  }
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='select'||tag==='textarea'||e.metaKey||e.ctrlKey||e.altKey) return;
+  const tabs=['home','pos','hist','panama','alerts','set'], n=parseInt(e.key,10);
+  if(n>=1&&n<=tabs.length){ e.preventDefault(); switchTab(tabs[n-1]); }
+  else if(e.key==='n'||e.key==='N'){ e.preventDefault(); openPosSheet(null); }
+  else if(e.key==='r'||e.key==='R'){ e.preventDefault(); refresh(false); }
+});
 
 /* ---- actions ---- */
 $('#addBtn').addEventListener('click',()=>openPosSheet(null));
