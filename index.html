@@ -97,12 +97,13 @@
   .card.pad0{padding:14px 12px}
 
   /* ---- Top spot cards ---- */
-  .spot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px}
+  .spot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:9px;margin-top:4px}
   .spot{background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line);
     border-radius:15px;padding:11px 11px 8px;position:relative;overflow:hidden}
   .spot .nm{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mut)}
   .spot .nm .d{width:8px;height:8px;border-radius:50%}
   .spot .d.XAU{background:var(--goldc)} .spot .d.XAG{background:var(--silverc)} .spot .d.HG{background:var(--copperc)}
+  .spot .d.XPT{background:#6fb6cc} .spot .d.XPD{background:#a97fd0}
   .spot .pr{font-weight:800;font-size:16.5px;margin-top:5px;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
   .spot .chg{font-size:11px;font-weight:700;margin-top:1px}
   .spot .mini{position:absolute;left:0;right:0;bottom:0;height:24px;opacity:.7}
@@ -143,6 +144,8 @@
   .badge.XAU{background:linear-gradient(140deg,#f7e08f,#e0b445)}
   .badge.XAG{background:linear-gradient(140deg,#eef2f8,#b9c4d6)}
   .badge.HG{background:linear-gradient(140deg,#f0b07d,#c47a44)}
+  .badge.XPT{background:linear-gradient(140deg,#d8ecf2,#6fb6cc)}
+  .badge.XPD{background:linear-gradient(140deg,#e6dcf3,#a97fd0)}
   .metal-row .mid{flex:1;min-width:0}
   .metal-row .nm{font-weight:600}
   .metal-row .qty{font-size:12px;color:var(--mut)}
@@ -235,6 +238,9 @@
   .seg button.on[data-m="XAU"]{background:linear-gradient(135deg,#f7e08f,#e0b445)}
   .seg button.on[data-m="XAG"]{background:linear-gradient(135deg,#eef2f8,#b9c4d6)}
   .seg button.on[data-m="HG"]{background:linear-gradient(135deg,#f0b07d,#c47a44)}
+  .seg button.on[data-m="XPT"]{background:linear-gradient(135deg,#d8ecf2,#6fb6cc)}
+  .seg button.on[data-m="XPD"]{background:linear-gradient(135deg,#e6dcf3,#a97fd0)}
+  #metalSeg,#aMetalSeg{flex-wrap:wrap} #metalSeg button,#aMetalSeg button{flex:1 1 28%}
   .seg button.on[data-d]{background:var(--accent);color:#0b1020}
   .seg button.on[data-s]{background:linear-gradient(135deg,#f5d67a,#e69a5c)}
   .seg button.on[data-s="RATIO"],.seg button.on[data-m="RATIO"],.seg button.on[data-mode]{background:var(--accent);color:#0b1020}
@@ -350,7 +356,7 @@
 <div id="app">
   <div class="topbar">
     <header class="top">
-      <div class="brand"><span class="logo"></span><div>Metals&nbsp;Vault<small>Or · Argent · Cuivre</small></div></div>
+      <div class="brand"><span class="logo"></span><div>Metals&nbsp;Vault<small>Or · Argent · Platine · Palladium · Cuivre</small></div></div>
       <span class="spacer"></span>
       <button class="chip" id="curBtn" title="Changer de devise" aria-label="Changer de devise"><span id="curLabel">CAD</span> ⇄</button>
       <button class="iconbtn" id="addBtn" title="Ajouter une position (N)" aria-label="Ajouter une position">＋</button>
@@ -398,6 +404,8 @@
         <button data-s="value" class="on">Portefeuille</button>
         <button data-s="XAU">Or</button>
         <button data-s="XAG">Argent</button>
+        <button data-s="XPT">Platine</button>
+        <button data-s="XPD">Palladium</button>
         <button data-s="HG">Cuivre</button>
         <button data-s="RATIO">Ratio O/A</button>
       </div>
@@ -483,7 +491,7 @@
   <div class="grab"></div>
   <h3 id="posSheetTitle">Ajouter une position</h3>
   <div class="field"><label>Type</label><div class="seg" id="typeSeg"><button data-t="buy">Achat</button><button data-t="sell">Vente</button></div></div>
-  <div class="field"><label>Métal</label><div class="seg" id="metalSeg"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="HG">Cuivre</button></div></div>
+  <div class="field"><label>Métal</label><div class="seg" id="metalSeg"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="XPT">Platine</button><button data-m="XPD">Palladium</button><button data-m="HG">Cuivre</button></div></div>
   <div class="field"><label>Mode de coût</label><div class="seg" id="modeSeg"><button data-mode="peroz">Par once</button><button data-mode="total">Montant total</button></div></div>
   <div class="two">
     <div class="field"><label>Quantité</label>
@@ -504,7 +512,7 @@
 <div class="sheet" id="alertSheet">
   <div class="grab"></div>
   <h3>Nouvelle alerte</h3>
-  <div class="field"><label>Suivi</label><div class="seg" id="aMetalSeg" style="flex-wrap:wrap"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="HG">Cuivre</button><button data-m="RATIO">Ratio O/A</button></div></div>
+  <div class="field"><label>Suivi</label><div class="seg" id="aMetalSeg" style="flex-wrap:wrap"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="XPT">Platine</button><button data-m="XPD">Palladium</button><button data-m="HG">Cuivre</button><button data-m="RATIO">Ratio O/A</button></div></div>
   <div class="field"><label>Condition</label><div class="seg" id="aDirSeg"><button data-d="above">Au-dessus de ▲</button><button data-d="below">Sous ▼</button></div></div>
   <div class="field"><label>Seuil <span class="hint" id="aTargetHint">($US/oz)</span></label><input id="aTarget" type="number" inputmode="decimal" step="any" placeholder="0"></div>
   <div class="calc" id="aCalc"></div>
@@ -541,9 +549,11 @@ const COPPER_LB_PER_OZT = 14.5833;
 const METALS = {
   XAU:{ name:'Or', ab:'Au', div:1, c:'#e0b445' },
   XAG:{ name:'Argent', ab:'Ag', div:1, c:'#b9c4d6' },
+  XPT:{ name:'Platine', ab:'Pt', div:1, c:'#6fb6cc' },
+  XPD:{ name:'Palladium', ab:'Pd', div:1, c:'#a97fd0' },
   HG: { name:'Cuivre', ab:'Cu', div:COPPER_LB_PER_OZT, c:'#c47a44' },
 };
-const METAL_ORDER = ['XAU','XAG','HG'];
+const METAL_ORDER = ['XAU','XAG','XPT','XPD','HG'];
 const CURRENCIES = ['CAD','USD','EUR','GBP','CHF','AUD','MXN','JPY','INR'];
 const CUR_NAMES = { CAD:'Dollar canadien',USD:'Dollar américain',EUR:'Euro',GBP:'Livre sterling',CHF:'Franc suisse',AUD:'Dollar australien',MXN:'Peso mexicain',JPY:'Yen japonais',INR:'Roupie indienne' };
 const RANGES = [{k:'7J',d:7},{k:'1M',d:30},{k:'3M',d:90},{k:'6M',d:180},{k:'1A',d:365},{k:'Max',d:null}];

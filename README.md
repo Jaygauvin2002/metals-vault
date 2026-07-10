@@ -1,6 +1,6 @@
 # Metals Vault
 
-PWA de suivi de portefeuille de métaux précieux — **or, argent, cuivre**. Interface en français québécois, thème sombre. Fonctionne sur MacBook (colonne centrée, graphiques au survol) et iPhone (« Sur l'écran d'accueil »).
+PWA de suivi de portefeuille de métaux précieux — **or, argent, platine, palladium, cuivre**. Interface en français québécois, thème sombre. Fonctionne sur MacBook (colonne centrée, graphiques au survol) et iPhone (« Sur l'écran d'accueil »).
 
 ## Fonctionnalités
 - Portefeuille en temps réel : valeur, investi, primes, plus-value (montant + %)
