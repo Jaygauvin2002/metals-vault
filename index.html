@@ -276,6 +276,12 @@
   .sig-gends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--mut2);margin-top:-2px}
   .sig-sub{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;margin-top:2px}
   .sig-ratio{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:13.5px}
+  .gsr-num{font-size:15px;margin-top:16px}
+  .gsr-gauge{height:10px;border-radius:6px;position:relative;margin:16px 0 6px;
+    background:linear-gradient(90deg,#e0b445 0%,#e0b445 25%,#2f3b52 25%,#2f3b52 58%,#b9c4d6 58%,#b9c4d6 100%)}
+  .gsr-gauge .mk{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;
+    border:2px solid #0b1020;transform:translate(-50%,-50%);box-shadow:0 1px 6px rgba(0,0,0,.6)}
+  .gsr-scale{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2)}
 
   .set-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line)}
   .set-row:last-child{border-bottom:0}
@@ -654,71 +660,42 @@ function notifyAlert(a,price){
    ============================================================ */
 function renderAll(){ renderHome(); renderPositions(); renderHistory(); renderPanama(); renderAlerts(); renderSettings(); }
 
-/* ---- signal d'achat (analyse indicative) ---- */
-function _mm(arr){ let hi=-Infinity,lo=Infinity,sum=0; for(const v of arr){ if(v>hi)hi=v; if(v<lo)lo=v; sum+=v; } return {hi,lo,avg:sum/arr.length,n:arr.length}; }
-function metalSeries(m,days){ const cut=days?Date.now()-days*86400000:0; return state.snapshots.filter(s=>s.p&&typeof s.p[m]==='number'&&s.t>=cut).map(s=>s.p[m]); }
+/* ---- signal d'achat basé sur le RATIO OR/ARGENT (prix or vs prix argent) ---- */
 function gsrCurrent(){ const g=spotUsd('XAU'),s=spotUsd('XAG'); return (g>0&&s>0)?g/s:null; }
-function gsrAvg(){ const arr=state.snapshots.filter(s=>s.p&&s.p.XAU>0&&s.p.XAG>0).map(s=>s.p.XAU/s.p.XAG); return arr.length>=5?_mm(arr).avg:null; }
-function dealLabel(score){ return score>=60?{t:'Aubaine',c:'buy'}:score>=35?{t:'Correct',c:'mid'}:{t:'Cher',c:'exp'}; }
-function buyMetrics(){
-  const out=[];
-  for(const m of METAL_ORDER){
-    const cur=spotUsd(m); if(!(cur>0)) continue;
-    let hist=metalSeries(m,30), win='30 j';
-    if(hist.length<4){ hist=metalSeries(m,0); win='depuis le début'; }
-    const o={m,cur,hasHist:hist.length>=4,win};
-    if(o.hasHist){ const s=_mm(hist);
-      o.rangePos = s.hi>s.lo ? (cur-s.lo)/(s.hi-s.lo) : 0.5;
-      o.score = Math.round((1-o.rangePos)*100);
-      o.vsAvg = (cur-s.avg)/s.avg*100;
-      const wk=metalSeries(m,7); o.mom = wk.length>=2?(cur-wk[0])/wk[0]*100:null;
-    }
-    out.push(o);
-  }
-  return out;
-}
 function renderBuySignal(){
   const host=$('#buySignal'); if(!host) return;
-  if(!METAL_ORDER.some(m=>spotUsd(m)>0)){ host.innerHTML=''; return; }
-  const metrics=buyMetrics();
-  const withHist=metrics.filter(x=>x.hasHist).sort((a,b)=>b.score-a.score);
-  const gsr=gsrCurrent(), gAvg=gsrAvg(), ref=gAvg||80;
-  const digs=c=>c<5?3:c<50?2:0;
+  const g=spotUsd('XAU'), s=spotUsd('XAG');
+  if(!(g>0&&s>0)){ host.innerHTML=`<h2 class="sec">Or vs Argent</h2><div class="card"><div class="muted center" style="padding:8px">Cours indisponibles — rafraîchissez.</div></div>`; return; }
+  const gsr=g/s;
 
-  let pick=null, reason='';
-  if(withHist.length){ pick=withHist[0];
-    const posTxt = pick.rangePos<=0.33?'proche de son plus bas récent':pick.rangePos>=0.66?'proche de son plus haut':'au milieu de sa fourchette';
-    const avgTxt = pick.vsAvg<=-0.5?`à ${Math.abs(pick.vsAvg).toFixed(1)} % sous sa moyenne ${pick.win}`:pick.vsAvg>=0.5?`à ${pick.vsAvg.toFixed(1)} % au-dessus de sa moyenne`:'à sa moyenne';
-    reason=`${avgTxt} · ${posTxt}`;
-  } else if(gsr){
-    if(gsr>ref*1.03){ pick={m:'XAG'}; reason=`Ratio or/argent élevé (${gsr.toFixed(0)}) : l'argent est bon marché face à l'or`; }
-    else if(gsr<ref*0.97){ pick={m:'XAU'}; reason=`Ratio or/argent bas (${gsr.toFixed(0)}) : l'or est bon marché face à l'argent`; }
-  }
+  // Seuils classiques du ratio or/argent
+  let metal=null, pickName='Équilibré', reason='', pillTxt='Neutre', pillCls='mid';
+  if(gsr>=80){ metal='XAG'; pickName='Argent'; pillTxt='Acheter argent'; pillCls='buy';
+    reason='Ratio élevé : l’argent est bon marché face à l’or — historiquement un bon point d’entrée sur l’argent.'; }
+  else if(gsr<=60){ metal='XAU'; pickName='Or'; pillTxt='Acheter or'; pillCls='buy';
+    reason='Ratio bas : l’or est bon marché face à l’argent.'; }
+  else if(gsr>=72){ metal='XAG'; pickName='Argent'; pillTxt='Plutôt argent'; pillCls='mid';
+    reason='Le ratio penche vers l’argent, sans être extrême.'; }
+  else if(gsr<=68){ metal='XAU'; pickName='Or'; pillTxt='Plutôt or'; pillCls='mid';
+    reason='Le ratio penche vers l’or, sans être extrême.'; }
+  else { reason='Ni l’or ni l’argent n’est nettement avantagé en ce moment (zone neutre 68–72).'; }
 
-  let rows='';
-  for(const o of metrics){
-    if(o.hasHist){ const d=dealLabel(o.score), pos=Math.max(3,Math.min(97,o.rangePos*100));
-      const sub=`${fmtMoney(o.cur,{digits:digs(o.cur)})} · ${o.vsAvg<=-0.5?'−'+Math.abs(o.vsAvg).toFixed(1)+'% vs moy. '+o.win:o.vsAvg>=0.5?'+'+o.vsAvg.toFixed(1)+'% vs moy.':'à sa moyenne'}${o.mom!=null?' · '+(o.mom>=0?'▲':'▼')+' '+Math.abs(o.mom).toFixed(1)+'% / 7j':''}`;
-      rows+=`<div class="sig-row"><div class="badge ${o.m}">${METALS[o.m].ab}</div>
-        <div class="sig-mid"><div class="sig-nm">${METALS[o.m].name}<span class="sig-pill ${d.c}">${d.t}</span></div>
-          <div class="sig-gauge"><span class="mk" style="left:${pos}%"></span></div>
-          <div class="sig-gends"><span>plus bas</span><span>plus haut</span></div>
-          <div class="sig-sub">${sub}</div></div></div>`;
-    } else {
-      rows+=`<div class="sig-row"><div class="badge ${o.m}">${METALS[o.m].ab}</div>
-        <div class="sig-mid"><div class="sig-nm">${METALS[o.m].name}<span class="sig-pill mid">—</span></div>
-          <div class="sig-sub">${fmtMoney(o.cur,{digits:digs(o.cur)})} · historique en constitution…</div></div></div>`;
-    }
-  }
-  let ratioLine='';
-  if(gsr){ const favor=gsr>ref*1.03?'favorise l’argent 🥈':gsr<ref*0.97?'favorise l’or 🥇':'équilibré';
-    ratioLine=`<div class="sig-ratio">Ratio or/argent : <b>${gsr.toFixed(1)}</b> — ${favor} <span class="muted">(${gAvg?'votre moy. '+gAvg.toFixed(1):'réf. ~80'})</span></div>`; }
-  const head = pick
-    ? `<div class="sig-head"><span class="sig-star">💡</span><div><div class="muted" style="font-size:12px">Le plus intéressant à acheter maintenant</div><div class="pick">${METALS[pick.m].name}</div></div></div><div class="sig-reason">${reason}</div>`
-    : `<div class="sig-head"><span class="sig-star">💡</span><div><div class="pick" style="font-size:17px">Pas de signal marqué</div><div class="muted" style="font-size:12px">L’analyse s’affine après quelques jours de suivi des prix</div></div></div>`;
-  host.innerHTML=`<h2 class="sec">Opportunité d'achat <span class="hint">analyse indicative</span></h2>
-    <div class="card">${head}<div style="margin-top:12px">${rows}</div>${ratioLine}
-      <div class="muted" style="font-size:11px;margin-top:10px">Basé sur la position du cours dans sa fourchette récente et le ratio or/argent. Analyse technique indicative — <b>pas un conseil financier</b>.</div></div>`;
+  const pos=Math.max(2,Math.min(98,(gsr-45)/60*100)); // échelle 45 → 105
+  const metalTag = metal?`<div class="badge ${metal}" style="width:34px;height:34px;border-radius:10px;font-size:13px">${METALS[metal].ab}</div>`:`<span class="sig-star">⚖️</span>`;
+
+  host.innerHTML=`<h2 class="sec">Or vs Argent <span class="hint">quel métal acheter</span></h2>
+    <div class="card">
+      <div class="sig-head">${metalTag}
+        <div><div class="muted" style="font-size:12px">Selon le ratio or/argent</div><div class="pick">${pickName}</div></div>
+        <span style="margin-left:auto" class="sig-pill ${pillCls}">${pillTxt}</span>
+      </div>
+      <div class="sig-reason">${reason}</div>
+      <div class="gsr-num">Ratio or/argent : <b>${gsr.toFixed(1)}</b></div>
+      <div class="muted" style="font-size:12.5px;margin-top:2px">1&nbsp;oz d'or = <b style="color:var(--tx)">${gsr.toFixed(1)} oz d'argent</b> au cours actuel · Or ${fmtMoney(g,{digits:0})} / Argent ${fmtMoney(s,{digits:2})}</div>
+      <div class="gsr-gauge"><span class="mk" style="left:${pos}%"></span></div>
+      <div class="gsr-scale"><span>← Or bon marché</span><span>60</span><span>80</span><span>Argent bon marché →</span></div>
+      <div class="muted" style="font-size:11px;margin-top:14px">Ratio = prix de l'or ÷ prix de l'argent. Élevé (≥80) → l'argent est historiquement bon marché ; bas (≤60) → c'est l'or. Analyse indicative — <b>pas un conseil financier</b>.</div>
+    </div>`;
 }
 
 function renderPanama(){
