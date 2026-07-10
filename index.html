@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Metals Vault — Métaux précieux</title>
+<meta name="description" content="Suivi de portefeuille de métaux précieux : or, argent, cuivre.">
+<meta name="theme-color" content="#070a16">
+<meta name="color-scheme" content="dark">
+
+<!-- PWA / iOS « Sur l'écran d'accueil » -->
+<link rel="manifest" href="./manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Metals Vault">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+
+<style>
+  :root{
+    --bg:#070a16; --bg2:#0b1020;
+    --surf:#111a2e; --surf2:#16223a; --surf3:#1c2b48;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --tx:#e9eef7; --mut:#8996ad; --mut2:#6b7794;
+    --gold:#f5d67a; --silver:#d7dee8; --copper:#e69a5c;
+    --up:#3ad6a0; --down:#ff6f78;
+    --accent:#6ea8ff;
+    --r:18px; --rs:12px;
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --tab-h:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow-x:hidden;max-width:100%}
+  body{
+    background:
+      radial-gradient(120% 60% at 100% 0%, #12203f 0%, rgba(18,32,63,0) 55%),
+      radial-gradient(120% 60% at 0% 0%, #1a1330 0%, rgba(26,19,48,0) 50%),
+      var(--bg);
+    color:var(--tx);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,system-ui,sans-serif;
+    font-size:16px; line-height:1.4;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    overscroll-behavior-y:none;
+  }
+  button{font-family:inherit;color:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:16px}
+
+  /* ---------- App scaffold ---------- */
+  #app{display:flex;flex-direction:column;height:100dvh}
+  header.top{
+    padding:calc(var(--safe-t) + 12px) 18px 12px;
+    display:flex;align-items:center;gap:12px;
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(180deg,rgba(7,10,22,.92),rgba(7,10,22,.55) 70%,transparent);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
+  .brand .logo{width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+    background:linear-gradient(140deg,#f5d67a,#e69a5c 55%,#b86b3a);
+    box-shadow:0 3px 10px rgba(245,214,122,.25),inset 0 0 0 1px rgba(255,255,255,.25)}
+  .brand small{display:block;font-weight:500;font-size:11px;color:var(--mut);letter-spacing:.3px}
+  .top .spacer{flex:1}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
+    padding:6px 10px;border-radius:999px;background:var(--surf);border:1px solid var(--line);
+    color:var(--mut);white-space:nowrap
+  }
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up)}
+  .chip.stale .dot{background:var(--down);box-shadow:0 0 8px var(--down)}
+  .chip.off .dot{background:var(--mut2);box-shadow:none}
+  #curBtn{cursor:pointer}
+
+  /* ---------- Pull to refresh ---------- */
+  #ptr{position:absolute;top:calc(var(--safe-t) + 4px);left:0;right:0;display:flex;justify-content:center;
+    pointer-events:none;z-index:15;opacity:0;transition:opacity .2s}
+  #ptr .spin{width:26px;height:26px;border-radius:50%;border:2.5px solid var(--line2);
+    border-top-color:var(--accent);}
+  #ptr.spinning .spin{animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Scroll area ---------- */
+  main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+    padding:4px 16px calc(var(--tab-h) + var(--safe-b) + 20px)}
+  .view{display:none;animation:fade .28s ease both}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.view{animation:none}}
+
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);
+    margin:22px 4px 10px;font-weight:700}
+  .card{background:linear-gradient(180deg,var(--surf),var(--bg2));
+    border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.28)}
+
+  /* ---------- Hero total ---------- */
+  .hero{padding:20px 18px 18px;text-align:center;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(80% 120% at 50% -20%,rgba(245,214,122,.10),transparent 60%)}
+  .hero .lbl{font-size:12.5px;color:var(--mut);letter-spacing:.5px;position:relative}
+  .hero .total{font-size:clamp(34px,10vw,44px);font-weight:800;letter-spacing:-1px;
+    margin:6px 0 2px;font-variant-numeric:tabular-nums;position:relative}
+  .hero .cur{font-size:14px;color:var(--mut);position:relative}
+  .hero .pnl{display:inline-flex;align-items:center;gap:8px;margin-top:12px;position:relative;
+    font-weight:700;font-size:15px;padding:7px 14px;border-radius:999px;font-variant-numeric:tabular-nums}
+  .pnl.up{color:var(--up);background:rgba(58,214,160,.12)}
+  .pnl.down{color:var(--down);background:rgba(255,111,120,.12)}
+  .pnl .arrow{font-size:12px}
+  .hero .sub{margin-top:12px;display:flex;gap:14px;justify-content:center;color:var(--mut);
+    font-size:12.5px;position:relative}
+  .hero .sub b{color:var(--tx);font-weight:600;font-variant-numeric:tabular-nums}
+
+  /* ---------- Spark ---------- */
+  .spark-wrap{margin-top:14px;position:relative}
+  .spark-wrap svg{width:100%;height:64px;display:block}
+  .spark-empty{color:var(--mut2);font-size:12px;text-align:center;padding:14px 0}
+
+  /* ---------- Metal spot cards ---------- */
+  .metal-row{display:flex;align-items:center;gap:13px;padding:13px 4px;border-bottom:1px solid var(--line)}
+  .metal-row:last-child{border-bottom:0}
+  .badge{width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;
+    font-weight:800;font-size:15px;color:#0b1020}
+  .badge.XAU{background:linear-gradient(140deg,#f7e08f,#e0b445)}
+  .badge.XAG{background:linear-gradient(140deg,#eef2f8,#b9c4d6)}
+  .badge.HG{background:linear-gradient(140deg,#f0b07d,#c47a44)}
+  .metal-row .mid{flex:1;min-width:0}
+  .metal-row .nm{font-weight:600}
+  .metal-row .qty{font-size:12.5px;color:var(--mut)}
+  .metal-row .rt{text-align:right;font-variant-numeric:tabular-nums}
+  .metal-row .price{font-weight:700}
+  .metal-row .chg{font-size:12px;font-weight:600}
+  .chg.up{color:var(--up)} .chg.down{color:var(--down)} .chg.flat{color:var(--mut)}
+  .alloc-bar{height:6px;border-radius:6px;background:var(--surf2);overflow:hidden;display:flex;margin-top:2px}
+  .alloc-bar i{height:100%;display:block}
+
+  /* ---------- Positions ---------- */
+  .pos{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line)}
+  .pos:last-child{border-bottom:0}
+  .pos .mid{flex:1;min-width:0}
+  .pos .nm{font-weight:600;display:flex;align-items:center;gap:8px}
+  .pos .meta{font-size:12px;color:var(--mut);margin-top:2px}
+  .pos .rt{text-align:right;font-variant-numeric:tabular-nums}
+  .pos .val{font-weight:700}
+  .pos .pl{font-size:12px;font-weight:600}
+  .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surf2);color:var(--mut);letter-spacing:.3px}
+
+  .empty{text-align:center;color:var(--mut);padding:40px 20px}
+  .empty .big{font-size:40px;opacity:.5;margin-bottom:8px}
+  .empty p{margin:6px 0}
+
+  /* ---------- Buttons ---------- */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:13px 16px;border-radius:14px;border:1px solid var(--line2);
+    background:var(--surf2);font-weight:700;font-size:15px;transition:transform .08s,filter .15s;width:100%}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{border:0;color:#0b1020;background:linear-gradient(135deg,#f5d67a,#e69a5c)}
+  .btn.ghost{background:transparent}
+  .btn.danger{color:var(--down);border-color:rgba(255,111,120,.4)}
+  .btn.sm{padding:9px 12px;font-size:13px;border-radius:11px;width:auto}
+  .row-actions{display:flex;gap:8px}
+
+  .fab{position:fixed;right:18px;bottom:calc(var(--tab-h) + var(--safe-b) + 16px);z-index:25;
+    width:56px;height:56px;border-radius:18px;border:0;font-size:28px;color:#0b1020;
+    background:linear-gradient(135deg,#f5d67a,#e69a5c);
+    box-shadow:0 10px 26px rgba(245,214,122,.4);display:grid;place-items:center;transition:transform .1s}
+  .fab:active{transform:scale(.9)}
+
+  /* ---------- Tab bar ---------- */
+  nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--tab-h) + var(--safe-b));
+    padding-bottom:var(--safe-b);display:flex;
+    background:linear-gradient(180deg,rgba(11,16,32,.6),rgba(7,10,22,.96));
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line)}
+  nav.tabs button{flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:3px;color:var(--mut2);font-size:10.5px;font-weight:600;letter-spacing:.2px;
+    transition:color .15s}
+  nav.tabs button .ic{font-size:21px;line-height:1;transition:transform .15s}
+  nav.tabs button.active{color:var(--tx)}
+  nav.tabs button.active .ic{transform:translateY(-1px) scale(1.06)}
+  nav.tabs button.active{position:relative}
+  nav.tabs button.active::before{content:"";position:absolute;top:6px;width:26px;height:3px;border-radius:3px;
+    background:linear-gradient(90deg,#f5d67a,#e69a5c)}
+
+  /* ---------- Sheet / modal ---------- */
+  .scrim{position:fixed;inset:0;z-index:40;background:rgba(2,4,10,.6);backdrop-filter:blur(3px);
+    opacity:0;pointer-events:none;transition:opacity .25s}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;
+    background:linear-gradient(180deg,var(--surf),var(--bg2));
+    border-radius:22px 22px 0 0;border-top:1px solid var(--line2);
+    padding:10px 18px calc(var(--safe-b) + 20px);
+    transform:translateY(102%);transition:transform .3s cubic-bezier(.3,.9,.3,1);
+    max-height:92dvh;overflow-y:auto}
+  .sheet.open{transform:none}
+  .grab{width:40px;height:5px;border-radius:5px;background:var(--line2);margin:6px auto 12px}
+  .sheet h3{margin:2px 0 14px;font-size:19px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12.5px;color:var(--mut);margin-bottom:6px;font-weight:600}
+  .field .hint{font-size:11px;color:var(--mut2);font-weight:500}
+  .field input,.field select,.field textarea{width:100%;padding:13px 14px;border-radius:13px;
+    background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;transition:border-color .15s}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+  .field textarea{resize:vertical;min-height:44px}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:12px;border-radius:13px;border:1px solid var(--line2);background:var(--bg2);
+    font-weight:700;color:var(--mut);transition:.15s}
+  .seg button.on{color:#0b1020;border-color:transparent}
+  .seg button.on[data-m="XAU"]{background:linear-gradient(135deg,#f7e08f,#e0b445)}
+  .seg button.on[data-m="XAG"]{background:linear-gradient(135deg,#eef2f8,#b9c4d6)}
+  .seg button.on[data-m="HG"]{background:linear-gradient(135deg,#f0b07d,#c47a44)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .calc{font-size:12.5px;color:var(--mut);background:var(--bg2);border:1px solid var(--line);
+    border-radius:12px;padding:11px 13px;margin-bottom:14px}
+  .calc b{color:var(--tx)}
+
+  /* ---------- Settings ---------- */
+  .set-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line)}
+  .set-row:last-child{border-bottom:0}
+  .set-row .mid{flex:1;min-width:0}
+  .set-row .t{font-weight:600}
+  .set-row .d{font-size:12px;color:var(--mut);margin-top:2px}
+
+  /* ---------- Toast ---------- */
+  #toasts{position:fixed;left:0;right:0;bottom:calc(var(--tab-h) + var(--safe-b) + 14px);z-index:60;
+    display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 16px}
+  .toast{max-width:440px;width:100%;background:var(--surf3);border:1px solid var(--line2);
+    border-radius:14px;padding:12px 15px;font-size:14px;font-weight:600;
+    box-shadow:0 12px 30px rgba(0,0,0,.45);animation:toastIn .3s ease both;display:flex;gap:10px;align-items:center}
+  .toast.ok{border-left:4px solid var(--up)} .toast.err{border-left:4px solid var(--down)}
+  .toast.info{border-left:4px solid var(--accent)}
+  @keyframes toastIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+
+  .muted{color:var(--mut)} .center{text-align:center}
+  .tnum{font-variant-numeric:tabular-nums}
+  a{color:var(--accent)}
+  .file-in{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><span class="logo"></span><div>Metals&nbsp;Vault<small>Or · Argent · Cuivre</small></div></div>
+    <span class="spacer"></span>
+    <button class="chip" id="curBtn" title="Changer de devise"><span id="curLabel">CAD</span> ▾</button>
+    <span class="chip" id="statusChip"><span class="dot"></span><span id="statusText">—</span></span>
+  </header>
+
+  <div id="ptr"><div class="spin"></div></div>
+
+  <main id="scroll">
+    <!-- ============ PORTEFEUILLE ============ -->
+    <section class="view active" id="view-home">
+      <div class="card hero">
+        <div class="lbl">VALEUR DU PORTEFEUILLE</div>
+        <div class="total tnum" id="totalVal">—</div>
+        <div class="cur" id="totalCur"></div>
+        <div class="pnl" id="pnlPill"><span class="arrow"></span><span id="pnlText">—</span></div>
+        <div class="sub">
+          <span>Investi <b class="tnum" id="investedVal">—</b></span>
+          <span>Primes <b class="tnum" id="premiumVal">—</b></span>
+        </div>
+        <div class="spark-wrap" id="sparkWrap"></div>
+      </div>
+
+      <h2 class="sec">Cours au comptant (spot / oz troy)</h2>
+      <div class="card" id="spotCard"></div>
+
+      <h2 class="sec">Répartition</h2>
+      <div class="card" id="allocCard"></div>
+    </section>
+
+    <!-- ============ POSITIONS ============ -->
+    <section class="view" id="view-pos">
+      <h2 class="sec">Mes positions</h2>
+      <div class="card" id="posCard"></div>
+      <button class="btn primary" id="addBtn2" style="margin-top:4px">+ Ajouter une position</button>
+    </section>
+
+    <!-- ============ ALERTES ============ -->
+    <section class="view" id="view-alerts">
+      <h2 class="sec">Alertes de prix</h2>
+      <div class="card" id="alertNoteCard" style="display:none"></div>
+      <div class="card" id="alertsCard"></div>
+      <button class="btn primary" id="addAlertBtn" style="margin-top:4px">+ Nouvelle alerte</button>
+    </section>
+
+    <!-- ============ RÉGLAGES ============ -->
+    <section class="view" id="view-set">
+      <h2 class="sec">Données & sauvegarde</h2>
+      <div class="card">
+        <div class="set-row">
+          <div class="mid"><div class="t">Exporter en JSON</div><div class="d">Sauvegarde complète (positions, alertes, historique) pour un autre appareil.</div></div>
+          <button class="btn sm" id="expJson">Exporter</button>
+        </div>
+        <div class="set-row">
+          <div class="mid"><div class="t">Importer un JSON</div><div class="d">Restaure une sauvegarde. Remplace les données actuelles.</div></div>
+          <button class="btn sm" id="impJsonBtn">Importer</button>
+        </div>
+        <div class="set-row">
+          <div class="mid"><div class="t">Exporter en CSV</div><div class="d">Positions en tableur (Excel, Numbers).</div></div>
+          <button class="btn sm" id="expCsv">Exporter</button>
+        </div>
+      </div>
+
+      <h2 class="sec">Affichage & notifications</h2>
+      <div class="card">
+        <div class="set-row">
+          <div class="mid"><div class="t">Devise d'affichage</div><div class="d">Conversion via taux du jour.</div></div>
+          <select id="curSelect" style="width:auto;padding:9px 12px;border-radius:11px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx)"></select>
+        </div>
+        <div class="set-row">
+          <div class="mid"><div class="t">Notifications d'alertes</div><div class="d" id="notifDesc">Recevoir une alerte quand un seuil est atteint.</div></div>
+          <button class="btn sm" id="notifBtn">Activer</button>
+        </div>
+      </div>
+
+      <h2 class="sec">Zone de danger</h2>
+      <div class="card">
+        <div class="set-row">
+          <div class="mid"><div class="t">Tout effacer</div><div class="d">Supprime positions, alertes et historique. Irréversible.</div></div>
+          <button class="btn sm danger" id="wipeBtn">Effacer</button>
+        </div>
+      </div>
+
+      <p class="center muted" style="font-size:12px;margin:20px 0 4px" id="aboutLine"></p>
+    </section>
+  </main>
+
+  <button class="fab" id="fab" title="Ajouter">+</button>
+
+  <nav class="tabs">
+    <button data-tab="home" class="active"><span class="ic">◈</span>Portefeuille</button>
+    <button data-tab="pos"><span class="ic">▤</span>Positions</button>
+    <button data-tab="alerts"><span class="ic">◔</span>Alertes</button>
+    <button data-tab="set"><span class="ic">⚙</span>Réglages</button>
+  </nav>
+</div>
+
+<!-- ===== Sheet: position ===== -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="posSheet">
+  <div class="grab"></div>
+  <h3 id="posSheetTitle">Ajouter une position</h3>
+  <div class="field">
+    <label>Métal</label>
+    <div class="seg" id="metalSeg">
+      <button data-m="XAU">Or</button>
+      <button data-m="XAG">Argent</button>
+      <button data-m="HG">Cuivre</button>
+    </div>
+  </div>
+  <div class="two">
+    <div class="field"><label>Quantité <span class="hint">(oz troy)</span></label>
+      <input id="fQty" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+    <div class="field"><label>Prix spot achat <span class="hint">($US/oz)</span></label>
+      <input id="fPrice" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+  </div>
+  <div class="two">
+    <div class="field"><label>Prime payée <span class="hint">($US/oz, option.)</span></label>
+      <input id="fPrem" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+    <div class="field"><label>Date d'achat</label>
+      <input id="fDate" type="date"></div>
+  </div>
+  <div class="field"><label>Note <span class="hint">(optionnel)</span></label>
+    <input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
+  <div class="calc" id="posCalc"></div>
+  <button class="btn primary" id="savePos">Enregistrer</button>
+  <button class="btn ghost danger" id="delPos" style="margin-top:8px;display:none">Supprimer cette position</button>
+</div>
+
+<!-- ===== Sheet: alert ===== -->
+<div class="sheet" id="alertSheet">
+  <div class="grab"></div>
+  <h3>Nouvelle alerte</h3>
+  <div class="field">
+    <label>Métal</label>
+    <div class="seg" id="aMetalSeg">
+      <button data-m="XAU">Or</button>
+      <button data-m="XAG">Argent</button>
+      <button data-m="HG">Cuivre</button>
+    </div>
+  </div>
+  <div class="field">
+    <label>Condition</label>
+    <div class="seg" id="aDirSeg">
+      <button data-d="above">Monte au-dessus de ▲</button>
+      <button data-d="below">Descend sous ▼</button>
+    </div>
+  </div>
+  <div class="field"><label>Seuil <span class="hint" id="aUnit">($US/oz)</span></label>
+    <input id="aTarget" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+  <div class="calc" id="aCalc"></div>
+  <button class="btn primary" id="saveAlert">Créer l'alerte</button>
+</div>
+
+<!-- ===== Sheet: currency ===== -->
+<div class="sheet" id="curSheet">
+  <div class="grab"></div>
+  <h3>Devise d'affichage</h3>
+  <div id="curList"></div>
+</div>
+
+<!-- ===== Confirm ===== -->
+<div class="sheet" id="confirmSheet">
+  <div class="grab"></div>
+  <h3 id="cfTitle">Confirmer</h3>
+  <p class="muted" id="cfMsg" style="margin:0 0 18px"></p>
+  <button class="btn danger" id="cfOk">Confirmer</button>
+  <button class="btn ghost" id="cfCancel" style="margin-top:8px">Annuler</button>
+</div>
+
+<input type="file" id="fileIn" class="file-in" accept="application/json,.json">
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Metals Vault — logique (vanilla JS, fichier unique)
+   ============================================================ */
+
+const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots',
+            last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency' };
+
+const COPPER_LB_PER_OZT = 14.5833; // 1 livre = 14.5833 oz troy (cuivre coté /lb)
+
+const METALS = {
+  XAU:{ name:'Or',     ab:'Au', div:1 },
+  XAG:{ name:'Argent', ab:'Ag', div:1 },
+  HG: { name:'Cuivre', ab:'Cu', div:COPPER_LB_PER_OZT },
+};
+const METAL_ORDER = ['XAU','XAG','HG'];
+
+const CURRENCIES = ['CAD','USD','EUR','GBP','CHF','AUD','MXN','JPY','INR'];
+const CUR_NAMES = { CAD:'Dollar canadien',USD:'Dollar américain',EUR:'Euro',GBP:'Livre sterling',
+  CHF:'Franc suisse',AUD:'Dollar australien',MXN:'Peso mexicain',JPY:'Yen japonais',INR:'Roupie indienne' };
+
+/* ---------- storage helpers ---------- */
+function load(key, fallback){
+  try{ const v = localStorage.getItem(key); return v==null ? fallback : JSON.parse(v); }
+  catch(e){ return fallback; }
+}
+function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+/* ---------- app state ---------- */
+const state = {
+  currency: load(K.cur, 'CAD'),
+  prices: load(K.last, {}),        // {XAU: usdPerOzt, ...}
+  prevPrices: {},                  // pour calcul de variation de session
+  fx: load(K.fx, { base:'USD', rates:{ USD:1 } }),
+  investments: load(K.inv, []),
+  alerts: load(K.al, []),
+  snapshots: load(K.snap, []),     // [{t, v}] v en USD
+  lastFetch: 0,
+  online: navigator.onLine,
+};
+if(typeof state.currency !== 'string') state.currency = 'CAD';
+if(!Array.isArray(state.investments)) state.investments = [];
+if(!Array.isArray(state.alerts)) state.alerts = [];
+if(!Array.isArray(state.snapshots)) state.snapshots = [];
+if(!state.fx || !state.fx.rates) state.fx = { base:'USD', rates:{USD:1} };
+
+/* ---------- utils ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+function uid(){ return 'p'+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
+
+function fxRate(cur=state.currency){ const r = state.fx?.rates?.[cur]; return (typeof r==='number' && r>0)?r:1; }
+function usd2disp(usd){ return usd * fxRate(); }
+
+function fmtMoney(usd, opts={}){
+  const cur = state.currency;
+  const v = usd2disp(usd);
+  const digits = opts.digits!=null ? opts.digits : (Math.abs(v)>=1000?0: Math.abs(v)>=1?2:2);
+  try{
+    return new Intl.NumberFormat('fr-CA',{style:'currency',currency:cur,
+      minimumFractionDigits:digits,maximumFractionDigits:digits}).format(v);
+  }catch(e){ return v.toFixed(digits)+' '+cur; }
+}
+function fmtNum(n, d=2){ return new Intl.NumberFormat('fr-CA',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n); }
+function fmtPct(p){ return (p>=0?'+':'')+fmtNum(p,2)+' %'; }
+function fmtOz(n){ return fmtNum(n, n>=100?2 : n>=1?3:4); }
+
+/* prix par oz troy en USD (déjà normalisé, cuivre inclus) */
+function spotUsd(m){ const p = state.prices[m]; return (typeof p==='number' && isFinite(p))?p:0; }
+
+/* ---------- aggregation ---------- */
+function positionsByMetal(){
+  const map = {XAU:[],XAG:[],HG:[]};
+  for(const p of state.investments){ if(map[p.metal]) map[p.metal].push(p); }
+  return map;
+}
+function metalTotals(m){
+  let qty=0, cost=0, prem=0;
+  for(const p of state.investments){
+    if(p.metal!==m) continue;
+    const q = +p.qty||0, price=+p.price||0, pr=+p.premium||0;
+    qty += q; cost += (price+pr)*q; prem += pr*q;
+  }
+  return { qty, cost, prem, value: qty*spotUsd(m) };
+}
+function portfolio(){
+  let value=0, cost=0, prem=0, qtyTotal=0;
+  for(const m of METAL_ORDER){ const t=metalTotals(m); value+=t.value; cost+=t.cost; prem+=t.prem; qtyTotal+=t.qty; }
+  const pnl = value-cost; const pct = cost>0 ? pnl/cost*100 : 0;
+  return { value, cost, prem, pnl, pct, qtyTotal };
+}
+
+/* ============================================================
+   FETCH — prix & change
+   ============================================================ */
+async function fetchJSON(url, ms=9000){
+  const ctl = new AbortController(); const t=setTimeout(()=>ctl.abort(), ms);
+  try{ const r = await fetch(url,{signal:ctl.signal,cache:'no-store'}); if(!r.ok) throw new Error(r.status); return await r.json(); }
+  finally{ clearTimeout(t); }
+}
+async function fetchPrices(){
+  const syms = METAL_ORDER;
+  const results = await Promise.allSettled(syms.map(s=>fetchJSON('https://api.gold-api.com/price/'+s)));
+  const out = {}; let ok=0;
+  results.forEach((res,i)=>{
+    const m = syms[i];
+    if(res.status==='fulfilled' && res.value && typeof res.value.price==='number'){
+      out[m] = res.value.price / METALS[m].div; ok++;
+    }
+  });
+  return ok>0 ? out : null;
+}
+async function fetchFx(){
+  try{ const j = await fetchJSON('https://open.er-api.com/v6/latest/USD');
+    if(j && j.rates && j.rates.USD){ return { base:'USD', rates:j.rates, at: j.time_last_update_unix||0 }; }
+  }catch(e){}
+  return null;
+}
+
+let refreshing=false;
+async function refresh(silent=false){
+  if(refreshing) return;
+  refreshing=true;
+  state.online = navigator.onLine;
+  setStatus('sync');
+  try{
+    const [prices, fx] = await Promise.all([fetchPrices(), fetchFx()]);
+    if(prices){
+      state.prevPrices = {...state.prices};
+      // conserver un ancien prix si l'API a raté un symbole
+      state.prices = { ...state.prices, ...prices };
+      save(K.last, state.prices);
+      state.lastFetch = Date.now();
+    }
+    if(fx){ state.fx = fx; save(K.fx, fx); }
+    renderAll();
+    if(prices){ recordSnapshot(); checkAlerts(); setStatus('ok'); if(!silent) toast('Prix mis à jour','ok'); }
+    else { setStatus(state.online?'stale':'off'); if(!silent) toast('Impossible de joindre l’API — données en cache','err'); }
+  }catch(e){
+    setStatus(state.online?'stale':'off');
+    if(!silent) toast('Erreur de rafraîchissement','err');
+  }finally{
+    refreshing=false;
+  }
+}
+
+/* ---------- snapshots (historique valeur) ---------- */
+function recordSnapshot(){
+  if(!state.investments.length) return;
+  const p = portfolio();
+  if(!(p.value>0)) return;
+  const now = Date.now();
+  const dayKey = new Date(now).toISOString().slice(0,10);
+  const arr = state.snapshots;
+  const lastIdx = arr.length-1;
+  const lastDay = lastIdx>=0 ? new Date(arr[lastIdx].t).toISOString().slice(0,10) : null;
+  if(lastDay===dayKey){ arr[lastIdx] = { t:now, v:p.value }; }
+  else { arr.push({ t:now, v:p.value }); }
+  if(arr.length>400) arr.splice(0, arr.length-400);
+  save(K.snap, arr);
+}
+
+/* ---------- alertes ---------- */
+function checkAlerts(){
+  let fired=0;
+  for(const a of state.alerts){
+    const price = spotUsd(a.metal); if(!(price>0)) continue;
+    const hit = a.dir==='above' ? price>=a.target : price<=a.target;
+    if(hit && !a.triggered){
+      a.triggered = true; a.firedAt = Date.now(); fired++;
+      notifyAlert(a, price);
+    } else if(!hit && a.triggered){
+      a.triggered = false; // réarmement quand la condition n'est plus remplie
+    }
+  }
+  if(fired) save(K.al, state.alerts);
+}
+function notifyAlert(a, price){
+  const nm = METALS[a.metal].name;
+  const dir = a.dir==='above'?'a dépassé':'est descendu sous';
+  const msg = `${nm} ${dir} ${fmtMoney(a.target)} — cours ${fmtMoney(price)}`;
+  toast('🔔 '+msg,'info', 5200);
+  try{
+    if('Notification' in window && Notification.permission==='granted'){
+      new Notification('Alerte '+nm, { body: msg, icon:'./icon-192.png', tag:'mv-'+a.id });
+    }
+  }catch(e){}
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function renderAll(){ renderHome(); renderPositions(); renderAlerts(); renderSettings(); }
+
+/* ----- status chip ----- */
+function setStatus(kind){
+  const chip=$('#statusChip'), txt=$('#statusText');
+  chip.classList.remove('stale','off');
+  if(kind==='sync'){ txt.textContent='Sync…'; }
+  else if(kind==='ok'){ txt.textContent = relTime(state.lastFetch); }
+  else if(kind==='stale'){ chip.classList.add('stale'); txt.textContent='Hors ligne'; }
+  else { chip.classList.add('off'); txt.textContent='Hors ligne'; }
+}
+function relTime(ts){
+  if(!ts) return '—';
+  const s=Math.round((Date.now()-ts)/1000);
+  if(s<45) return 'À jour';
+  if(s<90) return 'il y a 1 min';
+  if(s<3600) return 'il y a '+Math.round(s/60)+' min';
+  if(s<7200) return 'il y a 1 h';
+  return 'il y a '+Math.round(s/3600)+' h';
+}
+
+/* ----- animated counter ----- */
+function animateMoney(el, toUsd, digits){
+  const prev = parseFloat(el.dataset.raw||'NaN');
+  el.dataset.raw = String(toUsd);
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduce || !isFinite(prev) || Math.abs(prev-toUsd)<0.005){ el.textContent = fmtMoney(toUsd, digits!=null?{digits}:{}); return; }
+  const start=performance.now(), dur=650;
+  function step(now){
+    const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,3);
+    el.textContent = fmtMoney(prev+(toUsd-prev)*e, digits!=null?{digits}:{});
+    if(t<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function renderHome(){
+  const p = portfolio();
+  animateMoney($('#totalVal'), p.value);
+  $('#totalCur').textContent = state.currency + (Object.keys(state.prices).length? '' : ' · prix indisponibles');
+  animateMoney($('#investedVal'), p.cost);
+  animateMoney($('#premiumVal'), p.prem);
+
+  const pill=$('#pnlPill'), arrow=pill.querySelector('.arrow');
+  pill.classList.remove('up','down');
+  if(p.cost>0){
+    const up = p.pnl>=0; pill.classList.add(up?'up':'down');
+    arrow.textContent = up?'▲':'▼';
+    $('#pnlText').textContent = `${fmtMoney(p.pnl)} · ${fmtPct(p.pct)}`;
+  } else { arrow.textContent=''; $('#pnlText').textContent='Aucune position'; }
+
+  renderSpark();
+
+  // spot cards
+  const spot=$('#spotCard'); spot.innerHTML='';
+  for(const m of METAL_ORDER){
+    const price=spotUsd(m); const prev=state.prevPrices[m];
+    const t=metalTotals(m);
+    const row=document.createElement('div'); row.className='metal-row';
+    let chgHtml='<span class="chg flat">—</span>';
+    if(price>0 && typeof prev==='number' && prev>0 && Math.abs(price-prev)>1e-9){
+      const d=(price-prev)/prev*100, up=price>=prev;
+      chgHtml=`<span class="chg ${up?'up':'down'}">${up?'▲':'▼'} ${fmtNum(Math.abs(d),2)}%</span>`;
+    }
+    row.innerHTML=`
+      <div class="badge ${m}">${METALS[m].ab}</div>
+      <div class="mid"><div class="nm">${METALS[m].name}</div>
+        <div class="qty">${t.qty>0? fmtOz(t.qty)+' oz · '+fmtMoney(t.value):'—'}</div></div>
+      <div class="rt"><div class="price tnum">${price>0?fmtMoney(price,{digits:price<5?3:2}):'—'}</div>${chgHtml}</div>`;
+    spot.appendChild(row);
+  }
+
+  // allocation
+  const alloc=$('#allocCard');
+  if(p.value>0){
+    const cols={XAU:'#e0b445',XAG:'#b9c4d6',HG:'#c47a44'};
+    let bar='<div class="alloc-bar">';
+    for(const m of METAL_ORDER){ const t=metalTotals(m); if(t.value>0){ bar+=`<i style="width:${t.value/p.value*100}%;background:${cols[m]}"></i>`; } }
+    bar+='</div>';
+    let rows='';
+    for(const m of METAL_ORDER){ const t=metalTotals(m); if(t.value<=0) continue;
+      const pct=t.value/p.value*100;
+      rows+=`<div class="metal-row"><div class="badge ${m}">${METALS[m].ab}</div>
+        <div class="mid"><div class="nm">${METALS[m].name}</div><div class="qty">${fmtOz(t.qty)} oz</div></div>
+        <div class="rt"><div class="price tnum">${fmtNum(pct,1)}%</div><div class="qty">${fmtMoney(t.value)}</div></div></div>`;
+    }
+    alloc.innerHTML = bar + rows;
+  } else {
+    alloc.innerHTML = emptyBlock('◈','Aucune allocation','Ajoutez une position pour voir la répartition.');
+  }
+}
+
+function renderSpark(){
+  const wrap=$('#sparkWrap');
+  const pts = state.snapshots.map(s=>s.v).filter(v=>isFinite(v));
+  if(pts.length<2){ wrap.innerHTML='<div class="spark-empty">Historique en cours de constitution…</div>'; return; }
+  const W=320,H=64,pad=4;
+  const min=Math.min(...pts), max=Math.max(...pts), span=(max-min)||1;
+  const n=pts.length;
+  const X=i=> pad + i*(W-2*pad)/(n-1);
+  const Y=v=> H-pad - (v-min)/span*(H-2*pad);
+  let d='', area='';
+  pts.forEach((v,i)=>{ const x=X(i).toFixed(1), y=Y(v).toFixed(1); d+=(i?'L':'M')+x+' '+y+' '; });
+  area = `M${pad} ${H} `+ pts.map((v,i)=>'L'+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ')+` L${W-pad} ${H} Z`;
+  const up = pts[n-1]>=pts[0]; const col = up?'#3ad6a0':'#ff6f78';
+  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${col}" stop-opacity=".28"/><stop offset="1" stop-color="${col}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#sg)"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function emptyBlock(icon,title,sub){
+  return `<div class="empty"><div class="big">${icon}</div><p><b>${title}</b></p><p>${sub}</p></div>`;
+}
+
+function renderPositions(){
+  const card=$('#posCard');
+  if(!state.investments.length){
+    card.innerHTML=emptyBlock('▤','Aucune position','Touchez « + » pour ajouter votre premier achat.');
+    return;
+  }
+  const sorted=[...state.investments].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  card.innerHTML='';
+  for(const p of sorted){
+    const m=p.metal, price=spotUsd(m);
+    const q=+p.qty||0, buy=+p.price||0, prem=+p.premium||0;
+    const cost=(buy+prem)*q, val=q*price, pl=val-cost, pct=cost>0?pl/cost*100:0;
+    const up=pl>=0;
+    const el=document.createElement('div'); el.className='pos'; el.dataset.id=p.id;
+    el.innerHTML=`
+      <div class="badge ${m}">${METALS[m].ab}</div>
+      <div class="mid">
+        <div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}</div>
+        <div class="meta">${p.date||'—'} · achat ${fmtMoney(buy)}${prem>0?' +'+fmtMoney(prem)+' prime':''}/oz${p.note?' · '+escapeHtml(p.note):''}</div>
+      </div>
+      <div class="rt">
+        <div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
+        <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div>
+      </div>`;
+    el.addEventListener('click', ()=>openPosSheet(p.id));
+    card.appendChild(el);
+  }
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderAlerts(){
+  const card=$('#alertsCard');
+  const note=$('#alertNoteCard');
+  if('Notification' in window && Notification.permission!=='granted'){
+    note.style.display='block';
+    note.innerHTML=`<div class="muted" style="font-size:13px">🔔 Activez les notifications dans <b>Réglages</b> pour être alerté même app fermée. Sinon, l’alerte s’affiche à l’ouverture de l’app.</div>`;
+  } else note.style.display='none';
+
+  if(!state.alerts.length){
+    card.innerHTML=emptyBlock('◔','Aucune alerte','Créez une alerte pour surveiller un cours.');
+    return;
+  }
+  card.innerHTML='';
+  for(const a of state.alerts){
+    const price=spotUsd(a.metal);
+    const el=document.createElement('div'); el.className='metal-row';
+    const dirTxt=a.dir==='above'?'≥':'≤';
+    const active = price>0 ? (a.dir==='above'?price>=a.target:price<=a.target) : false;
+    el.innerHTML=`
+      <div class="badge ${a.metal}">${METALS[a.metal].ab}</div>
+      <div class="mid"><div class="nm">${METALS[a.metal].name} ${dirTxt} ${fmtMoney(a.target)}</div>
+        <div class="qty">${active?'<span style="color:var(--up)">● Atteinte</span>':'Cours '+(price>0?fmtMoney(price):'—')}</div></div>
+      <button class="btn sm ghost danger" data-del="${a.id}">Suppr.</button>`;
+    el.querySelector('[data-del]').addEventListener('click',(ev)=>{ ev.stopPropagation(); deleteAlert(a.id); });
+    card.appendChild(el);
+  }
+}
+
+function renderSettings(){
+  $('#curLabel').textContent = state.currency;
+  const sel=$('#curSelect');
+  if(sel.options.length===0){ sel.innerHTML = CURRENCIES.map(c=>`<option value="${c}">${c} — ${CUR_NAMES[c]||c}</option>`).join(''); }
+  sel.value = state.currency;
+  // notif button
+  const nb=$('#notifBtn'), nd=$('#notifDesc');
+  if(!('Notification' in window)){ nb.style.display='none'; nd.textContent='Notifications non supportées sur cet appareil.'; }
+  else if(Notification.permission==='granted'){ nb.textContent='Activées ✓'; nb.disabled=true; nb.style.opacity=.6; nd.textContent='Vous serez alerté quand un seuil est atteint.'; }
+  else if(Notification.permission==='denied'){ nb.textContent='Bloquées'; nb.disabled=true; nb.style.opacity=.6; nd.textContent='Autorisez les notifications dans les réglages iOS.'; }
+  else { nb.textContent='Activer'; nb.disabled=false; nb.style.opacity=1; }
+  const fxAt = state.fx?.at ? new Date(state.fx.at*1000).toLocaleDateString('fr-CA') : '—';
+  $('#aboutLine').innerHTML = `Metals Vault · données locales sur votre appareil<br>Taux de change : ${fxAt} · Prix : gold-api.com`;
+}
+
+/* ============================================================
+   SHEETS (modales)
+   ============================================================ */
+const scrim=$('#scrim');
+let openSheetEl=null;
+function openSheet(el){
+  if(openSheetEl && openSheetEl!==el) openSheetEl.classList.remove('open');
+  openSheetEl=el; scrim.classList.add('open'); el.classList.add('open');
+}
+function closeSheet(){ if(openSheetEl){ openSheetEl.classList.remove('open'); openSheetEl=null; } scrim.classList.remove('open'); }
+scrim.addEventListener('click', closeSheet);
+$$('.grab').forEach(g=>g.addEventListener('click', closeSheet));
+
+/* ----- position sheet ----- */
+let editId=null, selMetal='XAU';
+function setSegMetal(seg, m){ selMetal=m; $$('button',seg).forEach(b=>b.classList.toggle('on', b.dataset.m===m)); updatePosCalc(); }
+$$('#metalSeg button').forEach(b=> b.addEventListener('click',()=>setSegMetal($('#metalSeg'), b.dataset.m)));
+['#fQty','#fPrice','#fPrem'].forEach(s=> $(s).addEventListener('input', updatePosCalc));
+
+function updatePosCalc(){
+  const q=+$('#fQty').value||0, price=+$('#fPrice').value||0, prem=+$('#fPrem').value||0;
+  const cost=(price+prem)*q; const cur=spotUsd(selMetal); const val=q*cur; const pl=val-cost;
+  let html=`Coût total : <b>${fmtMoney(cost)}</b>`;
+  if(cur>0 && q>0){ const up=pl>=0; html+=` · Valeur actuelle : <b>${fmtMoney(val)}</b> · <b style="color:${up?'var(--up)':'var(--down)'}">${fmtMoney(pl)}</b>`; }
+  if(prem>0 && cur>0){ html+=`<br>Prime = ${fmtNum(cur>0?prem/cur*100:0,1)}% du spot actuel`; }
+  $('#posCalc').innerHTML=html;
+}
+function openPosSheet(id){
+  editId=id||null;
+  const del=$('#delPos');
+  if(id){
+    const p=state.investments.find(x=>x.id===id); if(!p) return;
+    $('#posSheetTitle').textContent='Modifier la position';
+    setSegMetal($('#metalSeg'), p.metal);
+    $('#fQty').value=p.qty; $('#fPrice').value=p.price;
+    $('#fPrem').value=p.premium||''; $('#fDate').value=p.date||''; $('#fNote').value=p.note||'';
+    del.style.display='block';
+  } else {
+    $('#posSheetTitle').textContent='Ajouter une position';
+    setSegMetal($('#metalSeg'),'XAU');
+    $('#fQty').value=''; $('#fPrice').value=''; $('#fPrem').value=''; $('#fNote').value='';
+    $('#fDate').value=new Date().toISOString().slice(0,10);
+    del.style.display='none';
+  }
+  updatePosCalc();
+  openSheet($('#posSheet'));
+}
+$('#savePos').addEventListener('click',()=>{
+  const q=+$('#fQty').value, price=+$('#fPrice').value, prem=+$('#fPrem').value||0;
+  if(!(q>0)){ toast('Entrez une quantité valide','err'); return; }
+  if(!(price>=0)){ toast('Entrez un prix d’achat valide','err'); return; }
+  const rec={ metal:selMetal, qty:q, price:price, premium:prem,
+              date:$('#fDate').value||new Date().toISOString().slice(0,10), note:$('#fNote').value.trim() };
+  if(editId){ const p=state.investments.find(x=>x.id===editId); Object.assign(p, rec); toast('Position modifiée','ok'); }
+  else { rec.id=uid(); rec.createdAt=Date.now(); state.investments.push(rec); toast('Position ajoutée','ok'); }
+  save(K.inv, state.investments);
+  recordSnapshot();
+  closeSheet(); renderAll();
+});
+$('#delPos').addEventListener('click',()=>{
+  const id=editId;
+  confirmDialog('Supprimer la position ?','Cette position sera définitivement retirée.',()=>{
+    state.investments=state.investments.filter(x=>x.id!==id); save(K.inv,state.investments);
+    closeSheet(); renderAll(); toast('Position supprimée','ok');
+  });
+});
+
+/* ----- alert sheet ----- */
+let aMetal='XAU', aDir='above';
+function setASeg(seg,val,attr){ $$('button',seg).forEach(b=>b.classList.toggle('on', b.dataset[attr]===val)); }
+$$('#aMetalSeg button').forEach(b=>b.addEventListener('click',()=>{ aMetal=b.dataset.m; setASeg($('#aMetalSeg'),aMetal,'m'); updateACalc(); }));
+$$('#aDirSeg button').forEach(b=>b.addEventListener('click',()=>{ aDir=b.dataset.d; setASeg($('#aDirSeg'),aDir,'d'); updateACalc(); }));
+$('#aTarget').addEventListener('input', updateACalc);
+function updateACalc(){
+  const cur=spotUsd(aMetal), tgt=+$('#aTarget').value||0;
+  let html = cur>0 ? `Cours actuel : <b>${fmtMoney(cur)}</b>` : 'Cours indisponible';
+  if(tgt>0 && cur>0){ const d=(tgt-cur)/cur*100; html+=` · Seuil ${d>=0?'+':''}${fmtNum(d,1)}% vs actuel`; }
+  $('#aCalc').innerHTML=html;
+}
+function openAlertSheet(){
+  aMetal='XAU'; aDir='above';
+  setASeg($('#aMetalSeg'),'XAU','m'); setASeg($('#aDirSeg'),'above','d');
+  $('#aTarget').value=''; updateACalc(); openSheet($('#alertSheet'));
+}
+$('#saveAlert').addEventListener('click',()=>{
+  const tgt=+$('#aTarget').value;
+  if(!(tgt>0)){ toast('Entrez un seuil valide','err'); return; }
+  const price=spotUsd(aMetal);
+  const alreadyMet = price>0 ? (aDir==='above'?price>=tgt:price<=tgt) : false;
+  state.alerts.push({ id:uid(), metal:aMetal, dir:aDir, target:tgt, triggered:alreadyMet, createdAt:Date.now() });
+  save(K.al, state.alerts);
+  closeSheet(); renderAlerts(); toast('Alerte créée','ok');
+});
+function deleteAlert(id){ state.alerts=state.alerts.filter(a=>a.id!==id); save(K.al,state.alerts); renderAlerts(); toast('Alerte supprimée','ok'); }
+
+/* ----- currency ----- */
+function openCurSheet(){
+  const list=$('#curList'); list.innerHTML='';
+  for(const c of CURRENCIES){
+    const b=document.createElement('button'); b.className='set-row'; b.style.width='100%'; b.style.background='none'; b.style.border=0; b.style.textAlign='left';
+    b.innerHTML=`<div class="mid"><div class="t">${c} — ${CUR_NAMES[c]||c}</div></div><div>${c===state.currency?'✓':''}</div>`;
+    b.addEventListener('click',()=>{ setCurrency(c); closeSheet(); });
+    list.appendChild(b);
+  }
+  openSheet($('#curSheet'));
+}
+function setCurrency(c){ state.currency=c; save(K.cur,c); $('#totalVal').dataset.raw=''; $('#investedVal').dataset.raw=''; $('#premiumVal').dataset.raw=''; renderAll(); }
+$('#curBtn').addEventListener('click', openCurSheet);
+$('#curSelect').addEventListener('change', e=> setCurrency(e.target.value));
+
+/* ----- confirm ----- */
+let cfCb=null;
+function confirmDialog(title,msg,cb){ $('#cfTitle').textContent=title; $('#cfMsg').textContent=msg; cfCb=cb; openSheet($('#confirmSheet')); }
+$('#cfOk').addEventListener('click',()=>{ const cb=cfCb; cfCb=null; closeSheet(); if(cb) cb(); });
+$('#cfCancel').addEventListener('click', closeSheet);
+
+/* ============================================================
+   TABS
+   ============================================================ */
+const scrollEl=$('#scroll');
+function switchTab(name){
+  $$('.view').forEach(v=>v.classList.remove('active'));
+  $('#view-'+name).classList.add('active');
+  $$('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  scrollEl.scrollTop=0;
+  $('#fab').style.display = (name==='home'||name==='pos') ? 'grid' : 'none';
+}
+$$('nav.tabs button').forEach(b=> b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+
+/* ============================================================
+   ACTIONS
+   ============================================================ */
+$('#fab').addEventListener('click',()=>{
+  const active=$('nav.tabs button.active').dataset.tab;
+  if(active==='alerts') openAlertSheet(); else openPosSheet(null);
+});
+$('#addBtn2').addEventListener('click',()=>openPosSheet(null));
+$('#addAlertBtn').addEventListener('click', openAlertSheet);
+
+$('#notifBtn').addEventListener('click', async ()=>{
+  if(!('Notification' in window)) return;
+  try{ const p=await Notification.requestPermission();
+    if(p==='granted') toast('Notifications activées','ok'); else toast('Notifications refusées','err');
+  }catch(e){}
+  renderSettings(); renderAlerts();
+});
+
+/* ----- export / import ----- */
+function download(filename, text, mime){
+  const blob=new Blob([text],{type:mime}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+function stamp(){ return new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); }
+
+$('#expJson').addEventListener('click',()=>{
+  const data={ app:'metals-vault', version:1, exportedAt:new Date().toISOString(), currency:state.currency,
+    investments:state.investments, alerts:state.alerts, snapshots:state.snapshots, lastPrices:state.prices };
+  download(`metals-vault-${stamp()}.json`, JSON.stringify(data,null,2), 'application/json');
+  toast('Sauvegarde JSON exportée','ok');
+});
+$('#expCsv').addEventListener('click',()=>{
+  if(!state.investments.length){ toast('Aucune position à exporter','err'); return; }
+  const head=['id','metal','nom','quantite_oz','prix_achat_usd_oz','prime_usd_oz','cout_total_usd','date','note'];
+  const rows=state.investments.map(p=>{ const q=+p.qty||0,pr=+p.price||0,pm=+p.premium||0;
+    return [p.id,p.metal,METALS[p.metal].name,q,pr,pm,((pr+pm)*q).toFixed(2),p.date||'',
+      '"'+String(p.note||'').replace(/"/g,'""')+'"'].join(','); });
+  download(`metals-vault-${stamp()}.csv`, head.join(',')+'\n'+rows.join('\n'), 'text/csv');
+  toast('CSV exporté','ok');
+});
+$('#impJsonBtn').addEventListener('click',()=> $('#fileIn').click());
+$('#fileIn').addEventListener('change',(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      const inv=Array.isArray(d.investments)?d.investments:null;
+      const al=Array.isArray(d.alerts)?d.alerts:[];
+      const sn=Array.isArray(d.snapshots)?d.snapshots:[];
+      if(!inv && !al.length){ throw new Error('format'); }
+      confirmDialog('Importer cette sauvegarde ?',
+        `${(inv||[]).length} position(s), ${al.length} alerte(s). Vos données actuelles seront remplacées.`,()=>{
+        state.investments = (inv||[]).map(p=>({ id:p.id||uid(), metal:METALS[p.metal]?p.metal:'XAU',
+          qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, date:p.date||'', note:p.note||'', createdAt:p.createdAt||Date.now() }));
+        state.alerts = al.map(a=>({ id:a.id||uid(), metal:METALS[a.metal]?a.metal:'XAU',
+          dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, createdAt:a.createdAt||Date.now() }));
+        state.snapshots = sn.filter(s=>s&&isFinite(s.v)&&s.t).map(s=>({t:s.t,v:+s.v}));
+        if(d.currency && CURRENCIES.includes(d.currency)) state.currency=d.currency;
+        save(K.inv,state.investments); save(K.al,state.alerts); save(K.snap,state.snapshots); save(K.cur,state.currency);
+        renderAll(); toast('Sauvegarde importée','ok');
+      });
+    }catch(err){ toast('Fichier JSON invalide','err'); }
+    finally{ e.target.value=''; }
+  };
+  r.readAsText(f);
+});
+$('#wipeBtn').addEventListener('click',()=>{
+  confirmDialog('Tout effacer ?','Positions, alertes et historique seront supprimés. Cette action est irréversible.',()=>{
+    state.investments=[]; state.alerts=[]; state.snapshots=[];
+    save(K.inv,[]); save(K.al,[]); save(K.snap,[]);
+    renderAll(); toast('Données effacées','ok');
+  });
+});
+
+/* ----- toast ----- */
+function toast(msg, kind='info', ms=2600){
+  const t=document.createElement('div'); t.className='toast '+kind; t.textContent=msg;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>{ t.style.transition='opacity .3s,transform .3s'; t.style.opacity='0'; t.style.transform='translateY(10px)';
+    setTimeout(()=>t.remove(),300); }, ms);
+}
+
+/* ============================================================
+   PULL TO REFRESH + auto refresh
+   ============================================================ */
+(function(){
+  const ptr=$('#ptr'); let startY=0, pulling=false, dist=0; const TH=70;
+  scrollEl.addEventListener('touchstart',(e)=>{ if(scrollEl.scrollTop<=0 && !openSheetEl){ startY=e.touches[0].clientY; pulling=true; dist=0; } },{passive:true});
+  scrollEl.addEventListener('touchmove',(e)=>{
+    if(!pulling) return;
+    dist=e.touches[0].clientY-startY;
+    if(dist>0){ const d=Math.min(dist,120); ptr.style.opacity=Math.min(1,d/TH); ptr.style.transform=`translateY(${d*0.5}px)`;
+      const s=ptr.querySelector('.spin'); s.style.transform=`rotate(${d*3}deg)`; }
+  },{passive:true});
+  scrollEl.addEventListener('touchend',()=>{
+    if(!pulling) return; pulling=false;
+    if(dist>TH){ ptr.classList.add('spinning'); ptr.style.opacity='1';
+      refresh().finally(()=>{ ptr.classList.remove('spinning'); ptr.style.opacity='0'; ptr.style.transform=''; }); }
+    else { ptr.style.opacity='0'; ptr.style.transform=''; }
+  });
+})();
+
+// refresh au retour dans l'app
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    setStatus(state.online?'ok':'off');
+    if(Date.now()-state.lastFetch>60000) refresh(true);
+  }
+});
+window.addEventListener('online',()=>{ state.online=true; refresh(true); });
+window.addEventListener('offline',()=>{ state.online=false; setStatus('off'); });
+// rafraîchissement périodique quand visible
+setInterval(()=>{ if(document.visibilityState==='visible' && Date.now()-state.lastFetch>120000) refresh(true); }, 60000);
+// mettre à jour le "il y a X min"
+setInterval(()=>{ if(!refreshing && $('#statusChip') && !$('#statusChip').classList.contains('off') && !$('#statusChip').classList.contains('stale')) setStatus('ok'); }, 30000);
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+$('#curLabel').textContent=state.currency;
+renderAll();
+setStatus(navigator.onLine?'ok':'off');
+if(Object.keys(state.prices).length) $('#statusText').textContent='Cache';
+refresh(true);
+
+// service worker
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
+</script>
+</body>
+</html>
