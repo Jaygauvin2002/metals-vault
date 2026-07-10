@@ -14,6 +14,7 @@ PWA de suivi de portefeuille de métaux précieux — **or, argent, cuivre**. In
 - **Sauvegarde / restauration JSON** complète + export CSV
 - **Mode hors ligne** (service worker, app-shell caché)
 - Pull-to-refresh + rafraîchissement au retour dans l'app
+- **Signal « Opportunité d'achat »** : quel métal est le plus intéressant maintenant (position dans la fourchette récente + ratio or/argent)
 - **Onglet Panama** : comparateur fiscal Québec vs Panama (taux modifiable) + checklist de relocalisation
 - 100 % local : vos données restent sur votre appareil (localStorage)
 
