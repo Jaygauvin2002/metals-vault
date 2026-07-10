@@ -1,7 +1,7 @@
 /* Metals Vault — service worker
    Stratégie : app-shell précaché + stale-while-revalidate pour le même-origine.
    Les appels d'API (gold-api / er-api) passent directement au réseau. */
-const CACHE = 'mv-shell-v3';
+const CACHE = 'mv-shell-v4';
 const SHELL = [
   './',
   './index.html',
@@ -42,18 +42,29 @@ self.addEventListener('fetch', (e) => {
   // Ne pas intercepter les APIs externes : on veut toujours des prix frais.
   if (url.origin !== self.location.origin) return;
 
-  // App-shell : stale-while-revalidate.
+  const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
+
+  if (isHTML) {
+    // Network-first : on montre toujours la dernière version quand on est en ligne,
+    // avec repli sur le cache hors ligne.
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) { const c = res.clone(); caches.open(CACHE).then((ca) => ca.put(req, c)); }
+          return res;
+        })
+        .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Autres ressources (icônes, manifest) : stale-while-revalidate.
   e.respondWith(
     caches.open(CACHE).then((cache) =>
       cache.match(req).then((cached) => {
         const network = fetch(req)
-          .then((res) => {
-            if (res && res.status === 200 && res.type === 'basic') {
-              cache.put(req, res.clone());
-            }
-            return res;
-          })
-          .catch(() => cached || cache.match('./index.html'));
+          .then((res) => { if (res && res.status === 200 && res.type === 'basic') cache.put(req, res.clone()); return res; })
+          .catch(() => cached);
         return cached || network;
       })
     )
