@@ -601,6 +601,7 @@ function spotUsd(m){ const p=state.prices[m]; return (typeof p==='number'&&isFin
 const OZT_G=31.1034768; // grammes par once troy
 function qtyToOz(v,unit){ v=+v||0; return unit==='g'?v/OZT_G:unit==='kg'?v*1000/OZT_G:v; }
 function ozToQty(oz,unit){ oz=+oz||0; return unit==='g'?oz*OZT_G:unit==='kg'?oz*OZT_G/1000:oz; }
+function weightLabel(oz){ const g=(+oz||0)*OZT_G; return g>=1000?fmtNum(g/1000,g/1000>=10?1:2)+' kg':fmtNum(g,g>=100?0:1)+' g'; }
 function curToUsd(amt,cur){ amt=+amt||0; const r=state.fx?.rates?.[cur]; return (typeof r==='number'&&r>0)?amt/r:amt; }
 function usdToCur(usd,cur){ const r=state.fx?.rates?.[cur]; return (typeof r==='number'&&r>0)?usd*r:usd; }
 function isSell(p){ return p&&p.type==='sell'; }
@@ -629,14 +630,18 @@ async function fetchJSON(url, ms=9000){
   try{ const r=await fetch(url,{signal:ctl.signal,cache:'no-store'}); if(!r.ok) throw new Error(r.status); return await r.json(); }
   finally{ clearTimeout(t); }
 }
+async function fetchJSONRetry(url, ms=9000, tries=2){
+  let err; for(let i=0;i<tries;i++){ try{ return await fetchJSON(url,ms); }catch(e){ err=e; } }
+  throw err;
+}
 async function fetchPrices(){
-  const res=await Promise.allSettled(METAL_ORDER.map(s=>fetchJSON('https://api.gold-api.com/price/'+s)));
+  const res=await Promise.allSettled(METAL_ORDER.map(s=>fetchJSONRetry('https://api.gold-api.com/price/'+s)));
   const out={}; let ok=0;
   res.forEach((r,i)=>{ const m=METAL_ORDER[i]; if(r.status==='fulfilled'&&r.value&&typeof r.value.price==='number'){ out[m]=r.value.price/METALS[m].div; ok++; } });
   return ok>0?out:null;
 }
 async function fetchFx(){
-  try{ const j=await fetchJSON('https://open.er-api.com/v6/latest/USD'); if(j&&j.rates&&j.rates.USD) return {base:'USD',rates:j.rates,at:j.time_last_update_unix||0}; }catch(e){}
+  try{ const j=await fetchJSONRetry('https://open.er-api.com/v6/latest/USD'); if(j&&j.rates&&j.rates.USD) return {base:'USD',rates:j.rates,at:j.time_last_update_unix||0}; }catch(e){}
   return null;
 }
 let refreshing=false;
@@ -857,7 +862,7 @@ function renderHomeData(p){
   const ratio=p.cost>0?p.value/p.cost:0;
   const stats=`<div class="stat-grid">
     <div class="stat"><div class="k">Rendement</div><div class="v" style="color:${p.pnl>=0?'var(--up)':'var(--down)'}">${p.cost>0?fmtPct(p.pct):'—'}</div><div class="s">sur ${fmtMoney(p.cost)} investis</div></div>
-    <div class="stat"><div class="k">Onces totales</div><div class="v">${fmtOz(p.qtyTotal)}</div><div class="s">${held.length} métal${held.length>1?'/aux':''}</div></div>
+    <div class="stat"><div class="k">Onces totales</div><div class="v">${fmtOz(p.qtyTotal)}</div><div class="s">${weightLabel(p.qtyTotal)} · ${held.length} métal${held.length>1?'/aux':''}</div></div>
     <div class="stat"><div class="k">Meilleur</div><div class="v" style="font-size:16px">${best?METALS[best.m].name:'—'}</div><div class="s" style="color:${best&&best.pct>=0?'var(--up)':'var(--down)'}">${best?fmtPct(best.pct):''}</div></div>
     <div class="stat"><div class="k">Primes payées</div><div class="v" style="font-size:16px">${fmtMoney(p.prem)}</div><div class="s">${p.cost>0?fmtNum(p.prem/p.cost*100,1)+'% du coût':''}</div></div>
   </div>`;
@@ -884,7 +889,7 @@ function renderHomeData(p){
       <div class="top"><div class="badge ${m}" style="width:30px;height:30px;border-radius:9px;font-size:12px">${METALS[m].ab}</div>
         <div class="nm">${METALS[m].name}</div><div class="pl ${up?'chg up':'chg down'}">${fmtPct(pct)}</div></div>
       <div class="bar"><i style="width:${Math.min(100,fill)}%;background:${up?'linear-gradient(90deg,#2fb488,#3ad6a0)':'linear-gradient(90deg,#e0555d,#ff6f78)'}"></i></div>
-      <div class="lab"><span>Coût ${fmtMoney(t.cost)} · ${fmtOz(t.qty)} oz @ ${fmtMoney(t.avg,{digits:t.avg<5?3:2})}/oz</span><span>Valeur ${fmtMoney(t.value)}</span></div>
+      <div class="lab"><span>Coût ${fmtMoney(t.cost)} · ${fmtOz(t.qty)} oz (${weightLabel(t.qty)}) @ ${fmtMoney(t.avg,{digits:t.avg<5?3:2})}/oz</span><span>Valeur ${fmtMoney(t.value)}</span></div>
     </div>`;
   }
   perf+='</div></section>';
