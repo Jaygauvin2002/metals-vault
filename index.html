@@ -729,10 +729,22 @@ function ratioSparkAB(A,B){
   return `<div style="margin-top:14px"><div class="muted" style="font-size:11px;margin-bottom:4px">Tendance récente du ratio (${pts.length} j) — <b style="color:${col}">${up?'en hausse':'en baisse'}</b></div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:34px;display:block"><path d="${d}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round"/></svg></div>`;
 }
+/* Repères historiques indicatifs (orientation A/B ; ratio bas → A bon marché).
+   Sources : BullionByPost, GuruFocus, SD Bullion, The Assay, goldpriceforecast. */
+const PAIR_REF={
+  'XAU/XAG':{min:45,max:105,strongLow:60,leanLow:68,leanHigh:72,strongHigh:80,note:'repères classiques 60/80'},
+  'XAU/XPT':{min:0.6,max:2.8,strongLow:0.95,leanLow:1.15,leanHigh:1.6,strongHigh:2.1,note:'moy. long terme or/platine ~1,3'},
+  'XAU/XPD':{min:1.0,max:4.5,strongLow:1.7,leanLow:2.0,leanHigh:2.7,strongHigh:3.3,note:'moy. long terme or/palladium ~2,3'},
+  'XPT/XPD':{min:0.6,max:5.0,strongLow:1.2,leanLow:1.7,leanHigh:2.5,strongHigh:3.5,note:'moy. long terme platine/palladium ~2,5'},
+  'XPT/XAG':{min:12,max:80,strongLow:20,leanLow:24,leanHigh:33,strongHigh:50,note:'moy. récente platine/argent ~26'},
+};
+function invRef(r){ return {min:1/r.max,max:1/r.min,strongLow:1/r.strongHigh,leanLow:1/r.leanHigh,leanHigh:1/r.leanLow,strongHigh:1/r.strongLow,note:r.note}; }
 function ratioRef(A,B,hist){
-  if(A==='XAU'&&B==='XAG') return {hasRef:true,gs:true,min:45,max:105,leanLow:68,leanHigh:72,strongLow:60,strongHigh:80};
+  const k1=A+'/'+B,k2=B+'/'+A;
+  if(PAIR_REF[k1]) return Object.assign({hasRef:true,gs:k1==='XAU/XAG',fixed:true},PAIR_REF[k1]);
+  if(PAIR_REF[k2]) return Object.assign({hasRef:true,gs:false,fixed:true},invRef(PAIR_REF[k2]));
   if(hist.length>=5){ const m=hist.reduce((a,b)=>a+b,0)/hist.length;
-    return {hasRef:true,gs:false,mean:m,min:m*0.7,max:m*1.3,leanLow:m*0.97,leanHigh:m*1.03,strongLow:m*0.90,strongHigh:m*1.10}; }
+    return {hasRef:true,gs:false,fixed:false,mean:m,note:'moyenne récente de vos données',min:m*0.7,max:m*1.3,leanLow:m*0.97,leanHigh:m*1.03,strongLow:m*0.90,strongHigh:m*1.10}; }
   return {hasRef:false};
 }
 function renderBuySignal(){
@@ -758,10 +770,10 @@ function renderBuySignal(){
   pickName = metal?METALS[metal].name:'Équilibré';
 
   const pos=ref.hasRef?Math.max(2,Math.min(98,(ratio-ref.min)/(ref.max-ref.min)*100)):50;
-  const pL=ref.hasRef?Math.max(0,Math.min(100,(ref.leanLow-ref.min)/(ref.max-ref.min)*100)):34;
-  const pH=ref.hasRef?Math.max(0,Math.min(100,(ref.leanHigh-ref.min)/(ref.max-ref.min)*100)):66;
+  const pL=ref.hasRef?Math.max(0,Math.min(100,(ref.strongLow-ref.min)/(ref.max-ref.min)*100)):34;
+  const pH=ref.hasRef?Math.max(0,Math.min(100,(ref.strongHigh-ref.min)/(ref.max-ref.min)*100)):66;
   const grad=`linear-gradient(90deg,${METALS[A].c} 0%,${METALS[A].c} ${pL}%,#2f3b52 ${pL}%,#2f3b52 ${pH}%,${METALS[B].c} ${pH}%,${METALS[B].c} 100%)`;
-  const t1=ref.hasRef?(ref.gs?'60':fmtRatio(ref.leanLow)):'—', t2=ref.hasRef?(ref.gs?'80':fmtRatio(ref.leanHigh)):'—';
+  const t1=ref.hasRef?fmtRatio(ref.strongLow):'—', t2=ref.hasRef?fmtRatio(ref.strongHigh):'—';
   const metalTag = metal?`<div class="badge ${metal}" style="width:34px;height:34px;border-radius:10px;font-size:13px">${METALS[metal].ab}</div>`:`<span class="sig-star">⚖️</span>`;
 
   host.innerHTML=`<h2 class="sec">Comparateur de métaux <span class="hint">quel métal acheter</span></h2>
@@ -777,7 +789,7 @@ function renderBuySignal(){
       <div class="gsr-gauge" style="background:${grad}"><span class="mk" style="left:${pos}%"></span></div>
       <div class="gsr-scale"><span>← ${nA} bon marché</span><span>${t1}</span><span>${t2}</span><span>${nB} bon marché →</span></div>
       ${ratioSparkAB(A,B)}
-      <div class="muted" style="font-size:11px;margin-top:14px">Ratio = prix ${nA} ÷ prix ${nB}. Bas → ${nA} bon marché ; élevé → ${nB} bon marché. ${ref.gs?'Repères classiques 60/80.':'Comparé à sa moyenne récente.'} Analyse indicative — <b>pas un conseil financier</b>.</div>
+      <div class="muted" style="font-size:11px;margin-top:14px">Ratio = prix ${nA} ÷ prix ${nB}. Bas → ${nA} bon marché ; élevé → ${nB} bon marché.${ref.note?' Référence : '+ref.note+'.':''} Analyse indicative — <b>pas un conseil financier</b>.</div>
     </div>`;
   bindRatioSelectors();
 }
