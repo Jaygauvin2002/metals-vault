@@ -703,6 +703,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
+const APP_VERSION = 'v35';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1612,7 +1613,7 @@ function renderSettings(){
   else if(Notification.permission==='denied'){ nb.textContent='Bloquées'; nb.disabled=true; nb.style.opacity=.6; nd.textContent='Autorisez les notifications dans iOS.'; }
   else{ nb.textContent='Activer'; nb.disabled=false; nb.style.opacity=1; }
   const fxAt=state.fx?.at?new Date(state.fx.at*1000).toLocaleDateString('fr-CA'):'—';
-  $('#aboutLine').innerHTML=`Metals Vault · données locales sur votre appareil<br>Taux de change : ${fxAt} · Prix : gold-api.com`;
+  $('#aboutLine').innerHTML=`Metals Vault <b style="color:var(--tx)">${APP_VERSION}</b> · données locales sur votre appareil<br>Taux de change : ${fxAt} · Prix : gold-api.com`;
 }
 
 /* ============================================================
