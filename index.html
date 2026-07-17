@@ -331,6 +331,11 @@
   .facchip .doc{font-size:16px;flex:0 0 auto}
   .facthumb{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:var(--bg2);border:1px solid var(--line);margin-bottom:12px;display:block}
   .clip{font-size:11px;color:var(--accent);font-weight:700}
+  .chkrow{display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:13px;background:var(--bg2);border:1px solid var(--line2);cursor:pointer;font-weight:600;color:var(--tx);user-select:none}
+  .chkrow input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex:0 0 auto;margin:0}
+  .chkrow .sub{font-size:11.5px;color:var(--mut);font-weight:500}
+  .pos.sold{opacity:.82}
+  .pos .badge.dim{filter:grayscale(.35) brightness(.9)}
   .hcol{min-width:0}
 
   /* ============ MODE BUREAU (Mac) ============ */
@@ -419,6 +424,10 @@
       <div class="chips" id="posFilter" style="margin-bottom:10px"></div>
       <div class="card" id="posCard"></div>
       <button class="btn primary" id="addBtn2" style="margin-top:4px">+ Ajouter une position</button>
+      <div id="soldSection" style="display:none">
+        <h2 class="sec" style="margin-top:26px">Vendues <span class="hint" id="soldCount"></span></h2>
+        <div class="card" id="soldCard"></div>
+      </div>
     </section>
 
     <!-- ============ HISTORIQUE ============ -->
@@ -546,6 +555,16 @@
   <div class="field"><label>Factures <span class="hint">(photo ou PDF, optionnel)</span></label>
     <div class="facchips" id="posFacChips"></div>
     <button class="btn sm" type="button" id="posFacAdd" style="width:100%">📎 Joindre une facture</button></div>
+  <div class="field" id="soldWrap">
+    <label class="chkrow" for="fSold"><input type="checkbox" id="fSold"><span>Position vendue <span class="sub">— la déplacer dans « Vendues »</span></span></label>
+    <div id="soldFields" style="display:none;margin-top:10px">
+      <div class="two">
+        <div class="field"><label>Date de vente</label><input id="fSoldDate" type="date"></div>
+        <div class="field"><label>Montant total reçu</label>
+          <div style="display:flex;gap:8px"><input id="fSoldTotal" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="fSoldCur" style="width:78px"></select></div></div>
+      </div>
+    </div>
+  </div>
   <div class="calc" id="posCalc"></div>
   <button class="btn primary" id="savePos">Enregistrer</button>
   <button class="btn ghost danger" id="delPos" style="margin-top:8px;display:none">Supprimer cette position</button>
@@ -683,10 +702,13 @@ function curToUsd(amt,cur){ amt=+amt||0; const r=state.fx?.rates?.[cur]; return 
 function usdToCur(usd,cur){ const r=state.fx?.rates?.[cur]; return (typeof r==='number'&&r>0)?usd*r:usd; }
 function isSell(p){ return p&&p.type==='sell'; }
 
+function lotCost(p){ return ((+p.price||0)+(+p.premium||0))*(+p.qty||0); }
 function metalTotals(m){
   let buyQty=0,buyCost=0,buyPrem=0,sellQty=0,realized=0;
   for(const p of state.investments){ if(p.metal!==m) continue; const q=+p.qty||0; if(!(q>0)) continue;
-    if(isSell(p)){ sellQty+=q; } else { buyQty+=q; buyCost+=((+p.price||0)+(+p.premium||0))*q; buyPrem+=(+p.premium||0)*q; } }
+    if(isSell(p)){ sellQty+=q; }
+    else if(p.sold){ realized += (+p.soldTotal||0) - lotCost(p); }
+    else { buyQty+=q; buyCost+=((+p.price||0)+(+p.premium||0))*q; buyPrem+=(+p.premium||0)*q; } }
   const avg=buyQty>0?buyCost/buyQty:0;
   for(const p of state.investments){ if(p.metal!==m||!isSell(p)) continue; const q=+p.qty||0; realized+=((+p.price||0)-avg)*q; }
   const netQty=Math.max(0,buyQty-sellQty);
@@ -1029,29 +1051,43 @@ function renderPositions(){
   if(fc){ fc.innerHTML = present.length>1 ? [{k:'all',lbl:'Tout'}].concat(present.map(m=>({k:m,lbl:METALS[m].name}))).map(c=>`<button data-k="${c.k}" class="${c.k===posFilter?'on':''}">${c.lbl}</button>`).join('') : '';
     $$('#posFilter button').forEach(b=>b.addEventListener('click',()=>{ posFilter=b.dataset.k; renderPositions(); })); }
   let sorted=[...state.investments]; if(posFilter!=='all') sorted=sorted.filter(p=>p.metal===posFilter);
-  sorted.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  sorted.sort((a,b)=>((b.sold?b.soldDate:b.date)||b.date||'').localeCompare((a.sold?a.soldDate:a.date)||a.date||''));
+  const active=sorted.filter(p=>!p.sold), soldLots=sorted.filter(p=>p.sold);
   card.innerHTML='';
-  for(const p of sorted){
-    const m=p.metal, price=spotUsd(m), q=+p.qty||0;
-    const el=document.createElement('div'); el.className='pos'; el.dataset.id=p.id;
-    if(isSell(p)){
-      const avg=metalTotals(m).avg, sp=+p.price||0, proceeds=sp*q, realized=(sp-avg)*q, up=realized>=0;
-      el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
-        <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(255,111,120,.15);color:var(--down)">VENTE</span>${invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':''}</div>
-          <div class="meta">${p.date||'—'} · vendu ${fmtMoney(sp)}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
-        <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
-          <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
-    } else {
-      const buy=+p.price||0, prem=+p.premium||0, cost=(buy+prem)*q, val=q*price, pl=val-cost, pct=cost>0?pl/cost*100:0, up=pl>=0;
-      el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
-        <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}${invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':''}</div>
-          <div class="meta">${p.date||'—'} · achat ${fmtMoney(buy)}${prem>0?' +'+fmtMoney(prem)+' prime':''}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
-        <div class="rt"><div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
-          <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div></div>`;
-    }
-    el.addEventListener('click',()=>openPosSheet(p.id));
-    card.appendChild(el);
+  if(!active.length) card.innerHTML=emptyBlock('▤','Aucune position détenue', soldLots.length?'Toutes vos positions sont vendues.':'Ajoutez votre premier achat.');
+  for(const p of active) card.appendChild(posRowEl(p));
+  const sec=$('#soldSection'), sc=$('#soldCard');
+  if(soldLots.length){ sec.style.display=''; $('#soldCount').textContent=soldLots.length+' vendue(s)'; sc.innerHTML=''; for(const p of soldLots) sc.appendChild(posRowEl(p)); }
+  else sec.style.display='none';
+}
+function posRowEl(p){
+  const m=p.metal, price=spotUsd(m), q=+p.qty||0;
+  const el=document.createElement('div'); el.className='pos'+(p.sold?' sold':''); el.dataset.id=p.id;
+  const clip=invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':'';
+  if(p.sold){
+    const cost=lotCost(p), proceeds=+p.soldTotal||0, realized=proceeds-cost, up=realized>=0;
+    el.innerHTML=`<div class="badge ${m} dim">${METALS[m].ab}</div>
+      <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(110,168,255,.16);color:var(--accent)">VENDU</span>${clip}</div>
+        <div class="meta">${p.soldDate||'—'} · coût ${fmtMoney(cost)}${p.note?' · '+escapeHtml(p.note):''}</div></div>
+      <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
+        <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
+  } else if(isSell(p)){
+    const avg=metalTotals(m).avg, sp=+p.price||0, proceeds=sp*q, realized=(sp-avg)*q, up=realized>=0;
+    el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
+      <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(255,111,120,.15);color:var(--down)">VENTE</span>${clip}</div>
+        <div class="meta">${p.date||'—'} · vendu ${fmtMoney(sp)}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
+      <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
+        <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
+  } else {
+    const buy=+p.price||0, prem=+p.premium||0, cost=(buy+prem)*q, val=q*price, pl=val-cost, pct=cost>0?pl/cost*100:0, up=pl>=0;
+    el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
+      <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}${clip}</div>
+        <div class="meta">${p.date||'—'} · achat ${fmtMoney(buy)}${prem>0?' +'+fmtMoney(prem)+' prime':''}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
+      <div class="rt"><div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
+        <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div></div>`;
   }
+  el.addEventListener('click',()=>openPosSheet(p.id));
+  return el;
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -1333,7 +1369,7 @@ $$('.grab').forEach(g=>g.addEventListener('click',closeSheet));
 
 let editId=null, selMetal='XAU', selType='buy', selMode='total';
 function fillCurSelect(sel){ if(!sel.options.length) sel.innerHTML=CURRENCIES.map(c=>`<option value="${c}">${c}</option>`).join(''); }
-function netQtyExcluding(m,exclId){ let b=0,s=0; for(const p of state.investments){ if(p.metal!==m||p.id===exclId) continue; const q=+p.qty||0; if(isSell(p))s+=q; else b+=q; } return Math.max(0,b-s); }
+function netQtyExcluding(m,exclId){ let b=0,s=0; for(const p of state.investments){ if(p.metal!==m||p.id===exclId) continue; const q=+p.qty||0; if(isSell(p))s+=q; else if(!p.sold) b+=q; } return Math.max(0,b-s); }
 function setSegMetal(seg,m){ selMetal=m; $$('button',seg).forEach(b=>b.classList.toggle('on',b.dataset.m===m)); updatePosCalc(); }
 function setSegType(t){ selType=t; $$('#typeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); updatePosUI(); }
 $$('#metalSeg button').forEach(b=>b.addEventListener('click',()=>setSegMetal($('#metalSeg'),b.dataset.m)));
@@ -1352,8 +1388,13 @@ function updatePosUI(){
   const isBuy=selType==='buy';
   $('#fPriceLbl').textContent = isBuy?'Coût total payé':'Montant total reçu';
   $('#fDateLbl').textContent = isBuy?'Date d’achat':'Date de vente';
+  $('#soldWrap').style.display = isBuy?'':'none';
+  updateSoldFields();
   updatePosCalc();
 }
+function updateSoldFields(){ $('#soldFields').style.display = ($('#fSold').checked && selType==='buy')?'':'none'; }
+$('#fSold').addEventListener('change',()=>{ updateSoldFields(); updatePosCalc(); if($('#fSold').checked&&!$('#fSoldDate').value) $('#fSoldDate').value=new Date().toISOString().slice(0,10); });
+['#fSoldTotal'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
 function updatePosCalc(){
   const e=readPosInputs(), spot=spotUsd(selMetal); let html='';
   if(selType==='sell'){
@@ -1361,6 +1402,10 @@ function updatePosCalc(){
     html=`Produit de la vente : <b>${fmtMoney(proceeds)}</b>`;
     if(t.avg>0&&e.qtyOz>0){ const up=gain>=0; html+=` · Gain réalisé estimé : <b style="color:${up?'var(--up)':'var(--down)'}">${fmtMoney(gain)}</b>`;
       html+=`<br>Coût moyen ${METALS[selMetal].name} : ${fmtMoney(t.avg,{digits:t.avg<5?3:2})}/oz · détenu ${fmtOz(t.qty)} oz`; }
+  } else if($('#fSold').checked){
+    const cost=(e.priceUsdOz+e.premUsdOz)*e.qtyOz, proceeds=curToUsd(+$('#fSoldTotal').value||0,$('#fSoldCur').value), gain=proceeds-cost, up=gain>=0;
+    html=`Coût : <b>${fmtMoney(cost)}</b> · Reçu : <b>${fmtMoney(proceeds)}</b>`;
+    if(cost>0||proceeds>0) html+=` · Gain réalisé : <b style="color:${up?'var(--up)':'var(--down)'}">${fmtMoney(gain)}</b>`;
   } else {
     const cost=(e.priceUsdOz+e.premUsdOz)*e.qtyOz, val=e.qtyOz*spot, pl=val-cost;
     html=`Coût total : <b>${fmtMoney(cost)}</b>`;
@@ -1371,7 +1416,7 @@ function updatePosCalc(){
   $('#posCalc').innerHTML=html;
 }
 function openPosSheet(id){
-  editId=id||null; posStagedFiles=[]; const del=$('#delPos'); fillCurSelect($('#fCur'));
+  editId=id||null; posStagedFiles=[]; const del=$('#delPos'); fillCurSelect($('#fCur')); fillCurSelect($('#fSoldCur'));
   if(id){ const p=state.investments.find(x=>x.id===id); if(!p) return;
     $('#posSheetTitle').textContent='Modifier la position';
     setSegType(isSell(p)?'sell':'buy'); setSegMetal($('#metalSeg'),p.metal);
@@ -1384,11 +1429,15 @@ function openPosSheet(id){
     $('#fQty').value = en&&en.q ? en.q : (ozToQty(+p.qty||0,unit)||'');
     $('#fPrice').value = totalCur ? Math.round(totalCur*100)/100 : '';
     $('#fDate').value=p.date||''; $('#fNote').value=p.note||''; del.style.display='block';
+    const sc=(p.sellEntry&&CURRENCIES.includes(p.sellEntry.cur))?p.sellEntry.cur:cur;
+    $('#fSold').checked=!!p.sold; $('#fSoldCur').value=sc;
+    $('#fSoldDate').value=p.soldDate||''; $('#fSoldTotal').value=p.sold?((p.sellEntry&&p.sellEntry.amount)||Math.round(usdToCur(+p.soldTotal||0,sc)*100)/100||''):'';
   } else {
     $('#posSheetTitle').textContent='Ajouter une position';
     setSegType('buy'); setSegMetal($('#metalSeg'),'XAU');
     $('#fUnit').value='oz'; $('#fCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
     $('#fQty').value=''; $('#fPrice').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
+    $('#fSold').checked=false; $('#fSoldDate').value=''; $('#fSoldTotal').value=''; $('#fSoldCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
   }
   updatePosUI(); renderPosFacChips(); openSheet($('#posSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
@@ -1398,9 +1447,15 @@ $('#savePos').addEventListener('click',()=>{
   if(!(e.qtyOz>0)){ toast('Entrez une quantité valide','err'); return; }
   if(!((+$('#fPrice').value)>=0)||(e.mode==='total'&&!((+$('#fPrice').value)>0))){ toast('Entrez un montant valide','err'); return; }
   if(e.type==='sell'){ const avail=netQtyExcluding(selMetal,editId); if(e.qtyOz>avail+1e-9){ toast('Vente supérieure à la quantité détenue ('+fmtOz(avail)+' oz)','err'); return; } }
+  const isSold = e.type==='buy' && $('#fSold').checked;
+  const soldCur=$('#fSoldCur').value, soldAmt=+$('#fSoldTotal').value||0;
   const rec={ type:e.type, metal:selMetal, qty:e.qtyOz, price:e.priceUsdOz, premium:e.premUsdOz,
     date:$('#fDate').value||new Date().toISOString().slice(0,10), note:$('#fNote').value.trim(),
-    entry:{unit:e.unit,cur:e.cur,mode:e.mode,q:e.rawQty,p:e.rawPrice,pr:e.rawPrem} };
+    entry:{unit:e.unit,cur:e.cur,mode:e.mode,q:e.rawQty,p:e.rawPrice,pr:e.rawPrem},
+    sold:isSold,
+    soldDate:isSold?($('#fSoldDate').value||new Date().toISOString().slice(0,10)):'',
+    soldTotal:isSold?curToUsd(soldAmt,soldCur):0,
+    sellEntry:isSold?{cur:soldCur,amount:soldAmt}:null };
   let posId;
   if(editId){ posId=editId; Object.assign(state.investments.find(x=>x.id===editId),rec); toast('Position modifiée','ok'); }
   else{ rec.id=uid(); rec.createdAt=Date.now(); state.investments.push(rec); posId=rec.id; toast(e.type==='sell'?'Vente enregistrée':'Position ajoutée','ok'); }
@@ -1501,7 +1556,7 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
     const inv=Array.isArray(d.investments)?d.investments:null, al=Array.isArray(d.alerts)?d.alerts:[], sn=Array.isArray(d.snapshots)?d.snapshots:[];
     if(!inv&&!al.length) throw new Error('format');
     confirmDialog('Importer cette sauvegarde ?',`${(inv||[]).length} position(s), ${al.length} alerte(s). Vos données actuelles seront remplacées.`,()=>{
-      state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, createdAt:p.createdAt||Date.now() }));
+      state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, sold:!!p.sold, soldDate:p.soldDate||'', soldTotal:+p.soldTotal||0, sellEntry:p.sellEntry&&typeof p.sellEntry==='object'?p.sellEntry:null, createdAt:p.createdAt||Date.now() }));
       state.alerts=al.map(a=>({ id:a.id||uid(), metal:(a.metal==='RATIO'||METALS[a.metal])?a.metal:'XAU', dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, createdAt:a.createdAt||Date.now() }));
       state.snapshots=sn.filter(s=>s&&isFinite(s.v)&&s.t).map(s=>({t:s.t,v:+s.v,p:s.p&&typeof s.p==='object'?s.p:undefined}));
       if(d.currency&&CURRENCIES.includes(d.currency)) state.currency=d.currency;
