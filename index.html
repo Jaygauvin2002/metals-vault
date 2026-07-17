@@ -86,7 +86,11 @@
   .view{display:none;animation:fade .28s ease both}
   .view.active{display:block}
   @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){.view{animation:none}}
+  @keyframes shimmer{0%{background-position:-240px 0}100%{background-position:240px 0}}
+  .skel{display:inline-block;height:1em;width:74px;border-radius:6px;vertical-align:middle;background:linear-gradient(90deg,var(--surf2) 25%,var(--surf3) 37%,var(--surf2) 63%);background-size:480px 100%;animation:shimmer 1.15s ease-in-out infinite}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:10px}
+  @media (prefers-reduced-motion:reduce){.view{animation:none}.skel{animation:none}}
 
   h2.sec{font-size:12.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);
     margin:20px 4px 10px;font-weight:700;display:flex;align-items:center;justify-content:space-between}
@@ -171,6 +175,10 @@
   .stat .s{font-size:11.5px;color:var(--mut);margin-top:1px}
 
   /* ---- positions ---- */
+  .pos-toolbar{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .pos-toolbar input[type=search]{flex:1;min-width:180px;padding:10px 14px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;transition:border-color .15s;font-size:14px}
+  .pos-toolbar input[type=search]:focus{border-color:var(--accent)}
+  .pos-toolbar select{padding:10px 12px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;font-weight:600;font-size:13px;cursor:pointer}
   .poslist{display:flex;flex-direction:column;gap:10px}
   .pos{display:flex;align-items:center;gap:13px;padding:14px 15px;background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line);border-radius:15px;cursor:pointer;transition:transform .1s,border-color .15s}
   .pos:hover{border-color:var(--line2);transform:translateY(-1px)}
@@ -189,6 +197,15 @@
   #imgPreview{position:fixed;z-index:60;pointer-events:none;opacity:0;transform:scale(.97);transition:opacity .12s,transform .12s;padding:6px;background:var(--surf3);border:1px solid var(--line2);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.65)}
   #imgPreview img{max-width:min(72vw,540px);max-height:min(72vh,540px);border-radius:9px;display:block}
   #imgPreview.on{opacity:1;transform:scale(1)}
+  .lb{position:fixed;inset:0;z-index:80;background:rgba(4,6,12,.92);display:none;align-items:center;justify-content:center}
+  .lb.on{display:flex;animation:fade .18s ease both}
+  .lb img{max-width:92vw;max-height:86vh;border-radius:12px;box-shadow:0 30px 90px rgba(0,0,0,.75);object-fit:contain;background:var(--bg2)}
+  .lb-close{position:absolute;top:18px;right:22px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:24px;border:0;cursor:pointer;display:grid;place-items:center;transition:.15s}
+  .lb-close:hover{background:rgba(255,255,255,.24)}
+  .lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:32px;border:0;cursor:pointer;display:grid;place-items:center;transition:.15s;padding-bottom:4px}
+  .lb-nav:hover{background:rgba(255,255,255,.24)}
+  .lb-nav.prev{left:22px}.lb-nav.next{right:22px}
+  .lb-cap{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);color:#e9eef7;font-size:13px;font-weight:600;background:rgba(0,0,0,.55);padding:7px 15px;border-radius:20px;white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis}
   .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surf2);color:var(--mut);letter-spacing:.3px}
 
   .empty{text-align:center;color:var(--mut);padding:36px 20px}
@@ -438,6 +455,7 @@
         <div class="cur" id="totalCur"></div>
         <div class="pnl flat" id="pnlPill"><span class="arrow"></span><span id="pnlText">—</span></div>
         <div class="sub">
+          <span id="dayWrap" style="display:none">Aujourd'hui <b class="tnum" id="dayVal">—</b></span>
           <span>Investi <b class="tnum" id="investedVal">—</b></span>
           <span>Primes <b class="tnum" id="premiumVal">—</b></span>
           <span id="realizedWrap" style="display:none">Réalisé <b class="tnum" id="realizedVal">—</b></span>
@@ -452,6 +470,16 @@
     <!-- ============ POSITIONS ============ -->
     <section class="view" id="view-pos">
       <h2 class="sec">Mes positions <span class="hint" id="posCount"></span></h2>
+      <div class="pos-toolbar">
+        <input id="posSearch" type="search" placeholder="Rechercher (métal, note, n° de série…)" autocomplete="off">
+        <select id="posSort">
+          <option value="date">Plus récentes</option>
+          <option value="date-asc">Plus anciennes</option>
+          <option value="value">Valeur ↓</option>
+          <option value="gain">Gain % ↓</option>
+          <option value="metal">Métal</option>
+        </select>
+      </div>
       <div class="chips" id="posFilter" style="margin-bottom:10px"></div>
       <div id="posCard" class="poslist"></div>
       <button class="btn primary" id="addBtn2" style="margin-top:14px">+ Ajouter une position</button>
@@ -656,6 +684,13 @@
 <input type="file" id="posFacFileIn" class="file-in" accept="image/*,application/pdf" multiple>
 <input type="file" id="posPhotoIn" class="file-in" accept="image/*" multiple>
 <div id="imgPreview"><img alt=""></div>
+<div id="lightbox" class="lb">
+  <button class="lb-close" id="lbClose" aria-label="Fermer">×</button>
+  <button class="lb-nav prev" id="lbPrev" aria-label="Précédent">‹</button>
+  <img id="lbImg" alt="">
+  <button class="lb-nav next" id="lbNext" aria-label="Suivant">›</button>
+  <div class="lb-cap" id="lbCap"></div>
+</div>
 <div id="toasts"></div>
 
 <script>
@@ -961,13 +996,23 @@ function animateMoney(el,toUsd,digits){
 }
 
 /* daily change from snapshots (fallback session) */
-function metalDayChange(m){
-  const cur=spotUsd(m); if(!(cur>0)) return null;
+function metalPrevPrice(m){
   const today=new Date().toISOString().slice(0,10);
   for(let i=state.snapshots.length-1;i>=0;i--){ const s=state.snapshots[i];
-    if(s.p && typeof s.p[m]==='number' && new Date(s.t).toISOString().slice(0,10)!==today){ const prev=s.p[m]; if(prev>0) return (cur-prev)/prev*100; break; } }
-  const pp=state.prevPrices[m]; if(typeof pp==='number'&&pp>0&&Math.abs(cur-pp)>1e-9) return (cur-pp)/pp*100;
+    if(s.p && typeof s.p[m]==='number' && new Date(s.t).toISOString().slice(0,10)!==today){ if(s.p[m]>0) return s.p[m]; break; } }
+  const pp=state.prevPrices[m]; if(typeof pp==='number'&&pp>0) return pp;
   return null;
+}
+function metalDayChange(m){
+  const cur=spotUsd(m); if(!(cur>0)) return null;
+  const prev=metalPrevPrice(m); if(prev==null||!(prev>0)||Math.abs(cur-prev)<1e-9) return null;
+  return (cur-prev)/prev*100;
+}
+function portfolioDayChange(){
+  let now=0,prev=0,have=false;
+  for(const m of METAL_ORDER){ const t=metalTotals(m); if(!(t.qty>0)) continue; const cur=spotUsd(m); if(!(cur>0)) continue;
+    const pp=metalPrevPrice(m); if(pp==null||!(pp>0)) continue; now+=t.qty*cur; prev+=t.qty*pp; have=true; }
+  if(!have||prev<=0) return null; return {abs:now-prev, pct:(now-prev)/prev*100};
 }
 function miniSpark(m){
   const pts=state.snapshots.filter(s=>s.p&&typeof s.p[m]==='number').slice(-30).map(s=>s.p[m]);
@@ -981,13 +1026,14 @@ function miniSpark(m){
 function renderHome(){
   // top spot cards
   const grid=$('#spotGrid'); grid.innerHTML='';
+  const loading = !Object.keys(state.prices).length;
   for(const m of METAL_ORDER){
     const price=spotUsd(m), ch=metalDayChange(m);
-    let chg='<span class="chg flat">—</span>';
+    let chg = loading?'<span class="skel" style="width:46px;height:.8em"></span>':'<span class="chg flat">—</span>';
     if(ch!=null) chg=`<span class="chg ${ch>=0?'up':'down'}">${ch>=0?'▲':'▼'} ${fmtNum(Math.abs(ch),2)}%</span>`;
     const el=document.createElement('div'); el.className='spot';
     el.innerHTML=`<div class="nm"><span class="d ${m}"></span>${METALS[m].name}</div>
-      <div class="pr">${price>0?fmtMoney(price,{digits:price<5?3:price<50?2:0}):'—'}</div>${chg}${miniSpark(m)}`;
+      <div class="pr">${price>0?fmtMoney(price,{digits:price<5?3:price<50?2:0}):(loading?'<span class="skel"></span>':'—')}</div>${chg}${miniSpark(m)}`;
     grid.appendChild(el);
   }
 
@@ -999,6 +1045,9 @@ function renderHome(){
   const rw=$('#realizedWrap');
   if(Math.abs(p.realized)>=0.005){ rw.style.display=''; const rv=$('#realizedVal'); rv.textContent=fmtMoney(p.realized); rv.style.color=p.realized>=0?'var(--up)':'var(--down)'; }
   else rw.style.display='none';
+  const dw=$('#dayWrap'), dc=portfolioDayChange();
+  if(dc){ dw.style.display=''; const dv=$('#dayVal'); dv.textContent=(dc.abs>=0?'+':'')+fmtMoney(dc.abs)+' · '+fmtPct(dc.pct); dv.style.color=dc.abs>=0?'var(--up)':'var(--down)'; }
+  else dw.style.display='none';
   const pill=$('#pnlPill'),arrow=pill.querySelector('.arrow'); pill.classList.remove('up','down','flat');
   if(p.cost>0){ const up=p.pnl>=0; pill.classList.add(up?'up':'down'); arrow.textContent=up?'▲':'▼'; $('#pnlText').textContent=`${fmtMoney(p.pnl)} · ${fmtPct(p.pct)}`; }
   else{ pill.classList.add('flat'); arrow.textContent=''; $('#pnlText').textContent='Aucune position'; }
@@ -1087,7 +1136,25 @@ function donutSvg(segs,total){
   return `<svg viewBox="0 0 132 132" width="132" height="132" style="transform:rotate(-90deg)">${parts}</svg>`;
 }
 
-let posFilter='all';
+let posFilter='all', posSort='date', posQuery='';
+function posValue(p){ const q=+p.qty||0; if(p.sold) return +p.soldTotal||0; if(isSell(p)) return (+p.price||0)*q; return q*spotUsd(p.metal); }
+function posGainPct(p){ const q=+p.qty||0;
+  if(p.sold){ const c=lotCost(p); return c>0?((+p.soldTotal||0)-c)/c*100:0; }
+  if(isSell(p)){ const avg=metalTotals(p.metal).avg; return avg>0?((+p.price||0)-avg)/avg*100:0; }
+  const cost=((+p.price||0)+(+p.premium||0))*q; return cost>0?(q*spotUsd(p.metal)-cost)/cost*100:0; }
+function posMatches(p,qy){ if(!qy) return true;
+  const hay=[METALS[p.metal]&&METALS[p.metal].name,p.note,p.date,p.soldDate].concat((p.details||[]).flatMap(d=>[d.k,d.v])).filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(qy); }
+function sortPositions(arr){
+  const dcmp=(a,b)=>((b.sold?b.soldDate:b.date)||b.date||'').localeCompare((a.sold?a.soldDate:a.date)||a.date||'');
+  if(posSort==='date-asc') return arr.sort((a,b)=>-dcmp(a,b));
+  if(posSort==='value') return arr.sort((a,b)=>posValue(b)-posValue(a)||dcmp(a,b));
+  if(posSort==='gain') return arr.sort((a,b)=>posGainPct(b)-posGainPct(a)||dcmp(a,b));
+  if(posSort==='metal') return arr.sort((a,b)=>METAL_ORDER.indexOf(a.metal)-METAL_ORDER.indexOf(b.metal)||dcmp(a,b));
+  return arr.sort(dcmp);
+}
+$('#posSearch').addEventListener('input',e=>{ posQuery=e.target.value.trim().toLowerCase(); renderPositions(); });
+$('#posSort').addEventListener('change',e=>{ posSort=e.target.value; renderPositions(); });
 function renderPositions(){
   $('#posCount').textContent = state.investments.length?state.investments.length+' opération(s)':'';
   const card=$('#posCard'), fc=$('#posFilter');
@@ -1096,11 +1163,12 @@ function renderPositions(){
   if(posFilter!=='all'&&!present.includes(posFilter)) posFilter='all';
   if(fc){ fc.innerHTML = present.length>1 ? [{k:'all',lbl:'Tout'}].concat(present.map(m=>({k:m,lbl:METALS[m].name}))).map(c=>`<button data-k="${c.k}" class="${c.k===posFilter?'on':''}">${c.lbl}</button>`).join('') : '';
     $$('#posFilter button').forEach(b=>b.addEventListener('click',()=>{ posFilter=b.dataset.k; renderPositions(); })); }
-  let sorted=[...state.investments]; if(posFilter!=='all') sorted=sorted.filter(p=>p.metal===posFilter);
-  sorted.sort((a,b)=>((b.sold?b.soldDate:b.date)||b.date||'').localeCompare((a.sold?a.soldDate:a.date)||a.date||''));
+  let sorted=[...state.investments].filter(p=>posMatches(p,posQuery));
+  if(posFilter!=='all') sorted=sorted.filter(p=>p.metal===posFilter);
+  sortPositions(sorted);
   const active=sorted.filter(p=>!p.sold), soldLots=sorted.filter(p=>p.sold);
   card.innerHTML='';
-  if(!active.length) card.innerHTML='<div class="card">'+emptyBlock('▤','Aucune position détenue', soldLots.length?'Toutes vos positions sont vendues.':'Ajoutez votre premier achat.')+'</div>';
+  if(!active.length) card.innerHTML='<div class="card">'+emptyBlock(posQuery?'🔍':'▤', posQuery?'Aucun résultat':'Aucune position détenue', posQuery?'Aucune position ne correspond à « '+escapeHtml(posQuery)+' ».':(soldLots.length?'Toutes vos positions sont vendues.':'Ajoutez votre premier achat.'))+'</div>';
   for(const p of active) card.appendChild(posRowEl(p));
   const sec=$('#soldSection'), sc=$('#soldCard');
   if(soldLots.length){ sec.style.display=''; $('#soldCount').textContent=soldLots.length+' vendue(s)'; sc.innerHTML=''; for(const p of soldLots) sc.appendChild(posRowEl(p)); }
@@ -1144,9 +1212,10 @@ function posRowEl(p){
       <div class="rt"><div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
         <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div></div>`;
   }
+  const posImgs=imagesForPos(p.id);
   $$('.pth',el).forEach(pt=>{ const img=pt.querySelector('img');
     if(img) bindThumbPreview(pt,img.getAttribute('src'));
-    pt.addEventListener('click',(ev)=>{ ev.stopPropagation(); openInvoiceFile(pt.dataset.att); }); });
+    pt.addEventListener('click',(ev)=>{ ev.stopPropagation(); openMedia(pt.dataset.att,posImgs); }); });
   el.addEventListener('click',()=>openPosSheet(p.id));
   return el;
 }
@@ -1235,11 +1304,35 @@ function renderInvoices(){
       <div class="acts"><button data-edit="${rec.id}">Détails</button><button class="del" data-del="${rec.id}">Suppr.</button></div>
     </div>`;
   }).join('');
-  $$('[data-open]',grid).forEach(el=>el.addEventListener('click',()=>openInvoiceFile(el.dataset.open)));
+  $$('[data-open]',grid).forEach(el=>el.addEventListener('click',()=>openMedia(el.dataset.open,invoiceCache)));
   $$('[data-edit]',grid).forEach(el=>el.addEventListener('click',()=>openFactSheet(el.dataset.edit)));
   $$('[data-del]',grid).forEach(el=>el.addEventListener('click',()=>deleteInvoice(el.dataset.del)));
 }
 function openInvoiceFile(id){ const rec=invoiceCache.find(x=>x.id===id); if(!rec) return; window.open(blobUrl(rec),'_blank'); }
+// Ouvre une image : visionneuse intégrée si image, nouvel onglet si PDF/autre.
+// `list` = ensemble d'attachements pour naviguer (flèches) ; on ne garde que les images.
+function openMedia(id,list){ const rec=invoiceCache.find(x=>x.id===id); if(!rec) return;
+  if(!isImg(rec)){ window.open(blobUrl(rec),'_blank'); return; }
+  const imgs=(list||[rec]).filter(isImg); const idx=Math.max(0,imgs.findIndex(x=>x.id===id));
+  openLightbox(imgs,idx); }
+let lbList=[], lbIdx=0;
+function openLightbox(list,idx){ lbList=list||[]; if(!lbList.length) return; lbIdx=Math.max(0,Math.min(idx||0,lbList.length-1)); renderLightbox(); $('#lightbox').classList.add('on'); }
+function renderLightbox(){ const rec=lbList[lbIdx]; if(!rec) return;
+  $('#lbImg').src=blobUrl(rec); const multi=lbList.length>1;
+  $('#lbPrev').style.display=multi?'':'none'; $('#lbNext').style.display=multi?'':'none';
+  const kind=rec.kind==='photo'?'Photo du produit':'Facture';
+  $('#lbCap').textContent=kind+(multi?` · ${lbIdx+1} / ${lbList.length}`:'')+(rec.fname?' · '+rec.fname:''); }
+function closeLightbox(){ $('#lightbox').classList.remove('on'); lbList=[]; }
+function lbStep(d){ if(lbList.length<2) return; lbIdx=(lbIdx+d+lbList.length)%lbList.length; renderLightbox(); }
+$('#lbClose').addEventListener('click',closeLightbox);
+$('#lbPrev').addEventListener('click',e=>{ e.stopPropagation(); lbStep(-1); });
+$('#lbNext').addEventListener('click',e=>{ e.stopPropagation(); lbStep(1); });
+$('#lbImg').addEventListener('click',e=>e.stopPropagation());
+$('#lightbox').addEventListener('click',closeLightbox);
+document.addEventListener('keydown',e=>{ if(!$('#lightbox').classList.contains('on')) return;
+  if(e.key==='Escape'){ e.preventDefault(); closeLightbox(); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); lbStep(-1); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); lbStep(1); } },true);
 function deleteInvoice(id){ const rec=invoiceCache.find(x=>x.id===id); confirmDialog('Supprimer cette facture ?', (rec&&rec.fname?escapeHtml(rec.fname)+' — ':'')+'Le fichier sera définitivement effacé de cet appareil.',()=>{ IDB.del(id).then(loadInvoices).then(()=>toast('Facture supprimée','ok')); }); }
 
 /* ---- fiche facture (édition métadonnées / ajout) ---- */
