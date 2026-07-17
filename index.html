@@ -1280,12 +1280,12 @@ $('#openFact').addEventListener('click',()=>{ if(facEdit&&facEdit.id) openInvoic
 
 /* ---- ajout depuis la galerie ---- */
 $('#addFactBtn').addEventListener('click',()=>$('#facFileIn').click());
-$('#facFileIn').addEventListener('change',e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
-  const tooBig=files.find(f=>f.size>25*1048576); if(tooBig){ toast('Fichier trop volumineux (max 25 Mo)','err'); return; }
-  if(files.length===1){ facEdit={file:files[0]}; openFactSheet(null); }
-  else { const today=new Date().toISOString().slice(0,10);
-    Promise.all(files.map(f=>IDB.put({ id:uid(), blob:f, mime:f.type||'application/octet-stream', fname:f.name||'facture', size:f.size||0, addedAt:Date.now(), invDate:today, amount:0, cur:state.currency, metal:'', positionId:'', note:'' })))
-      .then(()=>{ loadInvoices(); toast(files.length+' factures ajoutées','ok'); }).catch(()=>toast('Échec de l’enregistrement','err')); }
+$('#facFileIn').addEventListener('change',async e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  const tooBig=files.find(f=>f.size>40*1048576); if(tooBig){ toast('Fichier trop volumineux (max 40 Mo)','err'); return; }
+  if(files.length===1){ try{ facEdit={file:await prepAttachment(files[0])}; openFactSheet(null); }catch(err){ toast('Image au format non lisible (HEIC ?). Convertissez en JPG/PNG.','err',4200); } return; }
+  const today=new Date().toISOString().slice(0,10); const jobs=[]; let fail=0;
+  for(const f of files){ try{ const pf=await prepAttachment(f); jobs.push(IDB.put({ id:uid(), blob:pf, mime:pf.type||'application/octet-stream', fname:pf.name||'facture', size:pf.size||0, addedAt:Date.now(), invDate:today, amount:0, cur:state.currency, metal:'', positionId:'', note:'' })); }catch(err){ fail++; } }
+  Promise.all(jobs).then(()=>{ loadInvoices(); if(jobs.length) toast(jobs.length+' facture(s) ajoutées','ok'); if(fail) toast(fail+' image(s) non lisible(s) (HEIC ?)','err',4200); }).catch(()=>toast('Échec de l’enregistrement','err'));
 });
 $('#dlFactBtn').addEventListener('click',()=>{ if(!invoiceCache.length){ toast('Aucune facture à télécharger','info'); return; }
   invoiceCache.forEach((rec,i)=>{ setTimeout(()=>{ const u=URL.createObjectURL(rec.blob); const a=document.createElement('a'); a.href=u; a.download=rec.fname||('facture-'+(i+1)); document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }, i*350); });
@@ -1306,9 +1306,9 @@ function renderPosFacChips(){
   $$('[data-stg]',box).forEach(el=>el.addEventListener('click',()=>{ posStagedFiles.splice(+el.dataset.stg,1); renderPosFacChips(); }));
 }
 $('#posFacAdd').addEventListener('click',()=>$('#posFacFileIn').click());
-$('#posFacFileIn').addEventListener('change',e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
-  const tooBig=files.find(f=>f.size>25*1048576); if(tooBig){ toast('Fichier trop volumineux (max 25 Mo)','err'); return; }
-  posStagedFiles.push(...files); renderPosFacChips(); });
+$('#posFacFileIn').addEventListener('change',async e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  let fail=0; for(const f of files){ if(f.size>40*1048576){ fail++; continue; } try{ posStagedFiles.push(await prepAttachment(f)); }catch(err){ fail++; } }
+  renderPosFacChips(); if(fail) toast(fail+' image(s) au format non lisible (HEIC ?)','err',4200); });
 function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise.resolve();
   const files=posStagedFiles; posStagedFiles=[];
   const today=new Date().toISOString().slice(0,10);
@@ -1318,12 +1318,33 @@ function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise
 
 /* ---- photos du produit : grille de tuiles (clic / coller ⌘V / glisser-déposer) ---- */
 let posStagedPhotos=[], posRemovedPhotoIds=[];
-function addPhotoFiles(files){
-  const imgs=[...files].filter(f=>(f.type||'').startsWith('image/'));
+// Re-encode une image en JPEG via canvas (à partir du fichier reçu). Résout en Blob,
+// ou rejette si le navigateur ne sait pas décoder le format (ex. HEIC).
+function normalizeImage(file){ return new Promise((resolve,reject)=>{
+  const url=URL.createObjectURL(file); const img=new Image();
+  img.onload=()=>{ let w=img.naturalWidth,h=img.naturalHeight;
+    if(!w||!h){ URL.revokeObjectURL(url); return reject(new Error('decode')); }
+    const max=1800, s=Math.min(1,max/Math.max(w,h)); w=Math.max(1,Math.round(w*s)); h=Math.max(1,Math.round(h*s));
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    try{ c.getContext('2d').drawImage(img,0,0,w,h); }catch(err){ URL.revokeObjectURL(url); return reject(err); }
+    URL.revokeObjectURL(url);
+    c.toBlob(b=>{ b?resolve(b):reject(new Error('encode')); },'image/jpeg',0.85); };
+  img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('decode')); };
+  img.src=url;
+}); }
+function toJpegFile(blob,origName){ const base=(origName||'image').replace(/\.[^.]+$/,''); try{ return new File([blob],base+'.jpg',{type:'image/jpeg'}); }catch(e){ return blob; } }
+function looksImage(f){ return (f.type||'').startsWith('image/')||/\.(heic|heif|tiff?|png|jpe?g|webp|gif|bmp)$/i.test(f.name||''); }
+async function prepAttachment(f){ if(looksImage(f)){ const b=await normalizeImage(f); return toJpegFile(b,f.name); } return f; }
+async function addPhotoFiles(files){
+  const imgs=[...files].filter(looksImage);
   if(!imgs.length){ toast('Aucune image détectée','err'); return; }
-  const tooBig=imgs.find(f=>f.size>25*1048576); if(tooBig){ toast('Image trop volumineuse (max 25 Mo)','err'); return; }
-  posStagedPhotos.push(...imgs); renderPosMedia();
-  toast(imgs.length>1?imgs.length+' photos ajoutées':'Photo ajoutée','ok',1400);
+  let ok=0, fail=0;
+  for(const f of imgs){ if(f.size>40*1048576){ fail++; continue; }
+    try{ const b=await normalizeImage(f); posStagedPhotos.push(toJpegFile(b,f.name)); ok++; }
+    catch(e){ fail++; } }
+  renderPosMedia();
+  if(ok) toast(ok>1?ok+' photos ajoutées':'Photo ajoutée','ok',1400);
+  if(fail) toast(fail+' image(s) au format non lisible (HEIC ?). Convertissez en JPG/PNG.','err',4200);
 }
 function renderPosMedia(){
   const grid=$('#posMediaGrid'); if(!grid) return;
