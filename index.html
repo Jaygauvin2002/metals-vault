@@ -561,6 +561,8 @@
 
     <!-- ============ RÉGLAGES ============ -->
     <section class="view" id="view-set">
+      <h2 class="sec">Compte & synchronisation</h2>
+      <div class="card" id="acctCard"><div class="muted" style="font-size:13px;padding:4px">Chargement…</div></div>
       <h2 class="sec">Données & sauvegarde</h2>
       <div class="card">
         <div class="set-row"><div class="mid"><div class="t">Exporter en JSON</div><div class="d">Sauvegarde complète (positions, alertes, historique).</div></div><button class="btn sm" id="expJson">Exporter</button></div>
@@ -1858,10 +1860,59 @@ window.addEventListener('resize',()=>{ if($('#view-hist').classList.contains('ac
 setInterval(()=>{ if(document.visibilityState==='visible'&&navigator.onLine&&Date.now()-state.lastFetch>60000) refresh(true); },20000);
 setInterval(()=>{ const c=$('#statusChip'); if(!refreshing&&c&&!c.classList.contains('off')&&!c.classList.contains('stale')) setStatus('ok'); },30000);
 
+/* ============================================================
+   COMPTE & SYNCHRONISATION — Supabase (connexion privée)
+   La connexion est OPTIONNELLE : l'app marche entièrement en local.
+   ============================================================ */
+const SUPA_URL='https://gngstdqzlcvewridqazk.supabase.co';
+const SUPA_KEY='sb_publishable_VehRwNu2_TKjHF__1G5zvA__rz5bLx7';
+let supa=null, supaUser=null, supaReady=false;
+async function initSupabase(){
+  try{
+    const m=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    supa=m.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'mv_supabase_auth'}});
+    supaReady=true;
+    const {data}=await supa.auth.getSession(); supaUser=data&&data.session?data.session.user:null;
+    supa.auth.onAuthStateChange((ev,session)=>{ const was=!!supaUser; supaUser=session?session.user:null; renderAccount(); if(!was&&supaUser) toast('Connecté : '+(supaUser.email||'compte'),'ok',3500); });
+    if(location.hash&&/access_token=|error=|type=recovery/.test(location.hash)){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
+  }catch(e){ supaReady=false; }
+  renderAccount();
+}
+function renderAccount(){
+  const c=$('#acctCard'); if(!c) return;
+  if(!supaReady){ c.innerHTML='<div class="set-row"><div class="mid"><div class="t">Connexion indisponible</div><div class="d">Hors-ligne ou service inaccessible pour l’instant. L’app fonctionne quand même en local.</div></div><button class="btn sm" id="acctRetry">Réessayer</button></div>';
+    const r=$('#acctRetry'); if(r) r.addEventListener('click',initSupabase); return; }
+  if(supaUser){
+    c.innerHTML=`<div class="set-row"><div class="mid"><div class="t">✅ Connecté</div><div class="d">${escapeHtml(supaUser.email||'compte')}</div></div><button class="btn sm" id="btnSignout">Se déconnecter</button></div>`;
+    $('#btnSignout').addEventListener('click',async()=>{ try{ await supa.auth.signOut(); toast('Déconnecté','ok'); }catch(e){} });
+  } else {
+    c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Se connecter</div><div class="d">Sauvegarde et synchronise tes données en privé (accès réservé à ton compte). Optionnel — l’app marche sans.</div></div></div>
+      <div style="padding:2px 2px 4px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">
+          <input id="loginEmail" type="email" placeholder="ton@courriel.com" autocomplete="email" style="flex:1;min-width:190px;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none">
+          <button class="btn sm" id="btnMagic" style="white-space:nowrap">Recevoir le lien</button>
+        </div>
+        <button class="btn sm" id="btnGoogle" style="width:100%">Continuer avec Google</button>
+      </div>`;
+    $('#btnMagic').addEventListener('click',sendMagicLink);
+    $('#loginEmail').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendMagicLink(); } });
+    $('#btnGoogle').addEventListener('click',signInGoogle);
+  }
+}
+async function sendMagicLink(){ if(!supa) return; const email=($('#loginEmail').value||'').trim();
+  if(!/.+@.+\..+/.test(email)){ toast('Entre un courriel valide','err'); return; }
+  try{ const {error}=await supa.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}}); if(error) throw error;
+    toast('Lien envoyé ! Vérifie ta boîte courriel (et les indésirables).','ok',6000); }
+  catch(e){ toast('Échec : '+(e.message||e),'err',6000); } }
+async function signInGoogle(){ if(!supa) return;
+  try{ const {error}=await supa.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}}); if(error) throw error; }
+  catch(e){ toast('Google indisponible : '+(e.message||e),'err',6000); } }
+
 /* ---- boot ---- */
 $('#curLabel').textContent=state.currency;
 renderAll();
 loadInvoices();
+initSupabase();
 setStatus(navigator.onLine?'ok':'off');
 if(Object.keys(state.prices).length) $('#statusText').textContent='Cache';
 refresh(true);
