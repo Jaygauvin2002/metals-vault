@@ -1873,7 +1873,7 @@ setInterval(()=>{ const c=$('#statusChip'); if(!refreshing&&c&&!c.classList.cont
    ============================================================ */
 const SUPA_URL='https://gngstdqzlcvewridqazk.supabase.co';
 const SUPA_KEY='sb_publishable_VehRwNu2_TKjHF__1G5zvA__rz5bLx7';
-let supa=null, supaUser=null, supaReady=false;
+let supa=null, supaUser=null, supaReady=false, otpEmail='';
 async function initSupabase(){
   try{
     const m=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
@@ -1899,27 +1899,42 @@ function renderAccount(){
     $('#btnSignout').addEventListener('click',async()=>{ try{ await supa.auth.signOut(); toast('Déconnecté','ok'); setSyncStatus('idle'); }catch(e){} });
     $('#btnSyncNow').addEventListener('click',()=>{ pullState(); });
     updateSyncBadge();
+  } else if(otpEmail){
+    c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Entre le code</div><div class="d">Un code à 6 chiffres a été envoyé à <b style="color:var(--tx)">${escapeHtml(otpEmail)}</b>. Regarde tes courriels (et les indésirables).</div></div></div>
+      <div style="padding:2px 2px 4px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">
+          <input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" style="flex:1;min-width:140px;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;letter-spacing:4px;font-size:18px;font-weight:700;text-align:center">
+          <button class="btn sm" id="btnVerify" style="white-space:nowrap">Se connecter</button>
+        </div>
+        <button class="btn sm ghost" id="btnResend" style="width:100%">Renvoyer / changer d'e-mail</button>
+      </div>`;
+    $('#btnVerify').addEventListener('click',verifyCode);
+    $('#otpCode').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); verifyCode(); } });
+    $('#btnResend').addEventListener('click',()=>{ otpEmail=''; renderAccount(); });
+    setTimeout(()=>{ try{ $('#otpCode').focus(); }catch(e){} },60);
   } else {
     c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Se connecter</div><div class="d">Sauvegarde et synchronise tes données en privé (accès réservé à ton compte). Optionnel — l’app marche sans.</div></div></div>
       <div style="padding:2px 2px 4px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">
           <input id="loginEmail" type="email" placeholder="ton@courriel.com" autocomplete="email" style="flex:1;min-width:190px;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none">
-          <button class="btn sm" id="btnMagic" style="white-space:nowrap">Recevoir le lien</button>
+          <button class="btn sm" id="btnMagic" style="white-space:nowrap">Recevoir le code</button>
         </div>
-        <div class="muted" style="font-size:12px">Un lien de connexion t'est envoyé par courriel — aucun mot de passe à retenir.</div>
+        <div class="muted" style="font-size:12px">Un code à 6 chiffres t'est envoyé par courriel (idéal sur iPhone — rien à retenir).</div>
       </div>`;
-    $('#btnMagic').addEventListener('click',sendMagicLink);
-    $('#loginEmail').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendMagicLink(); } });
+    $('#btnMagic').addEventListener('click',sendCode);
+    $('#loginEmail').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendCode(); } });
   }
 }
-async function sendMagicLink(){ if(!supa) return; const email=($('#loginEmail').value||'').trim();
+async function sendCode(){ if(!supa) return; const email=($('#loginEmail').value||'').trim();
   if(!/.+@.+\..+/.test(email)){ toast('Entre un courriel valide','err'); return; }
-  try{ const {error}=await supa.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}}); if(error) throw error;
-    toast('Lien envoyé ! Vérifie ta boîte courriel (et les indésirables).','ok',6000); }
+  try{ const {error}=await supa.auth.signInWithOtp({email,options:{shouldCreateUser:true}}); if(error) throw error;
+    otpEmail=email; renderAccount(); toast('Code envoyé ! Vérifie tes courriels.','ok',6000); }
   catch(e){ toast('Échec : '+(e.message||e),'err',6000); } }
-async function signInGoogle(){ if(!supa) return;
-  try{ const {error}=await supa.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}}); if(error) throw error; }
-  catch(e){ toast('Google indisponible : '+(e.message||e),'err',6000); } }
+async function verifyCode(){ if(!supa) return; const token=($('#otpCode').value||'').replace(/\D/g,'');
+  if(token.length<6){ toast('Entre le code à 6 chiffres','err'); return; }
+  try{ const {error}=await supa.auth.verifyOtp({email:otpEmail,token,type:'email'}); if(error) throw error;
+    otpEmail=''; /* onAuthStateChange (SIGNED_IN) affiche « connecté » et lance la synchro */ }
+  catch(e){ toast('Code invalide ou expiré : '+(e.message||e),'err',6000); } }
 
 /* ---- synchronisation des données (table user_state) ---- */
 let syncTimer=null, syncing=false, pulling=false, applyingRemote=false, syncStatus='idle';
