@@ -85,6 +85,7 @@
   @keyframes spin{to{transform:rotate(360deg)}}
 
   main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:2px 16px 26px}
+  #appFooter{text-align:center;color:var(--mut2);font-size:11px;font-weight:600;letter-spacing:.3px;padding:18px 0 8px;opacity:.75}
   .view{display:none;animation:fade .28s ease both}
   .view.active{display:block}
   @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -583,10 +584,14 @@
         <b style="color:var(--tx)">Échap</b> fermer une fenêtre · <b style="color:var(--tx)">Entrée</b> valider
       </div></div>
 
+      <h2 class="sec">Application</h2>
+      <div class="card"><div class="set-row"><div class="mid"><div class="t">Forcer la mise à jour</div><div class="d">Recharge la dernière version (vide le cache). Utile si l'app semble bloquée sur une vieille version.</div></div><button class="btn sm" id="updateBtn">Mettre à jour</button></div></div>
+
       <h2 class="sec">Zone de danger</h2>
       <div class="card"><div class="set-row"><div class="mid"><div class="t">Tout effacer</div><div class="d">Supprime positions, alertes, historique et factures. Irréversible.</div></div><button class="btn sm danger" id="wipeBtn">Effacer</button></div></div>
       <p class="center muted" style="font-size:12px;margin:20px 0 4px" id="aboutLine"></p>
     </section>
+    <footer id="appFooter">Metals Vault · <span id="footVer"></span></footer>
   </main>
 
   <nav class="tabs">
@@ -702,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1845,6 +1850,10 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
 $('#wipeBtn').addEventListener('click',()=>{ confirmDialog('Tout effacer ?','Positions, alertes, historique et factures seront supprimés. Irréversible.',()=>{
   state.investments=[]; state.alerts=[]; state.snapshots=[]; save(K.inv,[]); save(K.al,[]); save(K.snap,[]);
   IDB.clear().then(loadInvoices).catch(()=>{}); renderAll(); toast('Données effacées','ok'); }); });
+$('#updateBtn').addEventListener('click',async()=>{ toast('Mise à jour…','info',2000);
+  try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
+  try{ if('serviceWorker' in navigator){ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r=>r.unregister())); } }catch(e){}
+  setTimeout(()=>{ location.reload(true); },400); });
 
 function toast(msg,kind='info',ms=2600){ const t=document.createElement('div'); t.className='toast '+kind; t.textContent=msg; $('#toasts').appendChild(t);
   setTimeout(()=>{ t.style.transition='opacity .3s,transform .3s'; t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); },ms); }
@@ -2001,6 +2010,7 @@ async function downloadMissing(remoteMeta){ if(!(supaReady&&supaUser)||!Array.is
 
 /* ---- boot ---- */
 $('#curLabel').textContent=state.currency;
+$('#footVer').textContent=APP_VERSION;
 renderAll();
 loadInvoices();
 initSupabase();
