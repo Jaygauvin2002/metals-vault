@@ -171,14 +171,21 @@
   .stat .s{font-size:11.5px;color:var(--mut);margin-top:1px}
 
   /* ---- positions ---- */
-  .pos{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line)}
-  .pos:last-child{border-bottom:0}
+  .poslist{display:flex;flex-direction:column;gap:10px}
+  .pos{display:flex;align-items:center;gap:13px;padding:14px 15px;background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line);border-radius:15px;cursor:pointer;transition:transform .1s,border-color .15s}
+  .pos:hover{border-color:var(--line2);transform:translateY(-1px)}
   .pos .mid{flex:1;min-width:0}
-  .pos .nm{font-weight:600;display:flex;align-items:center;gap:8px}
+  .pos .nm{font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .pos .meta{font-size:12px;color:var(--mut);margin-top:2px}
-  .pos .rt{text-align:right;font-variant-numeric:tabular-nums}
+  .pos .rt{text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto}
   .pos .val{font-weight:700}
   .pos .pl{font-size:12px;font-weight:600}
+  .pthumb{width:44px;height:44px;border-radius:11px;flex:0 0 auto;overflow:hidden;background:var(--bg2);border:1px solid var(--line2);position:relative;cursor:zoom-in}
+  .pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .pthumb .dot{position:absolute;bottom:-3px;right:-3px;width:15px;height:15px;border-radius:50%;border:2px solid var(--bg);box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+  #imgPreview{position:fixed;z-index:60;pointer-events:none;opacity:0;transform:scale(.97);transition:opacity .12s,transform .12s;padding:6px;background:var(--surf3);border:1px solid var(--line2);border-radius:14px;box-shadow:0 20px 55px rgba(0,0,0,.6)}
+  #imgPreview img{max-width:340px;max-height:340px;border-radius:9px;display:block}
+  #imgPreview.on{opacity:1;transform:scale(1)}
   .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surf2);color:var(--mut);letter-spacing:.3px}
 
   .empty{text-align:center;color:var(--mut);padding:36px 20px}
@@ -347,6 +354,10 @@
   .det-view .r:last-child{border-bottom:0}
   .det-view .r .k{color:var(--mut)}
   .det-view .r .v{color:var(--tx);font-weight:600;text-align:right;word-break:break-word}
+  .photorow{display:flex;gap:12px;align-items:center}
+  .photorow .pv{width:64px;height:64px;border-radius:13px;flex:0 0 auto;overflow:hidden;background:var(--bg2);border:1px solid var(--line2);display:grid;place-items:center;color:var(--mut);font-size:24px}
+  .photorow .pv img{width:100%;height:100%;object-fit:cover;display:block}
+  .photorow .btns{flex:1;display:flex;flex-direction:column;gap:8px}
   .hcol{min-width:0}
 
   /* ============ MODE BUREAU (Mac) ============ */
@@ -433,11 +444,11 @@
     <section class="view" id="view-pos">
       <h2 class="sec">Mes positions <span class="hint" id="posCount"></span></h2>
       <div class="chips" id="posFilter" style="margin-bottom:10px"></div>
-      <div class="card" id="posCard"></div>
-      <button class="btn primary" id="addBtn2" style="margin-top:4px">+ Ajouter une position</button>
+      <div id="posCard" class="poslist"></div>
+      <button class="btn primary" id="addBtn2" style="margin-top:14px">+ Ajouter une position</button>
       <div id="soldSection" style="display:none">
         <h2 class="sec" style="margin-top:26px">Vendues <span class="hint" id="soldCount"></span></h2>
-        <div class="card" id="soldCard"></div>
+        <div id="soldCard" class="poslist"></div>
       </div>
     </section>
 
@@ -563,6 +574,14 @@
   </div>
   <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
   <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
+  <div class="field"><label>Photo du produit <span class="hint">(pour différencier vos pièces, optionnel)</span></label>
+    <div class="photorow">
+      <div class="pv" id="posPhotoPrev">📷</div>
+      <div class="btns">
+        <button class="btn sm" type="button" id="posPhotoBtn" style="width:100%">📷 Choisir une photo</button>
+        <button class="btn sm ghost" type="button" id="posPhotoDel" style="width:100%;display:none">Retirer la photo</button>
+      </div>
+    </div></div>
   <div class="field"><label>Détails <span class="hint">(n° de coulée, série, raffineur… optionnel)</span></label>
     <div id="posDetails"></div>
     <button class="btn sm" type="button" id="posDetAdd" style="width:100%">+ Ajouter une info</button></div>
@@ -630,6 +649,8 @@
 <input type="file" id="fileIn" class="file-in" accept="application/json,.json">
 <input type="file" id="facFileIn" class="file-in" accept="image/*,application/pdf" multiple>
 <input type="file" id="posFacFileIn" class="file-in" accept="image/*,application/pdf" multiple>
+<input type="file" id="posPhotoIn" class="file-in" accept="image/*">
+<div id="imgPreview"><img alt=""></div>
 <div id="toasts"></div>
 
 <script>
@@ -1062,9 +1083,10 @@ function donutSvg(segs,total){
 
 let posFilter='all';
 function renderPositions(){
+  _posThumbUrls.forEach(u=>URL.revokeObjectURL(u)); _posThumbUrls=[];
   $('#posCount').textContent = state.investments.length?state.investments.length+' opération(s)':'';
   const card=$('#posCard'), fc=$('#posFilter');
-  if(!state.investments.length){ if(fc) fc.innerHTML=''; card.innerHTML=emptyBlock('▤','Aucune position','Touchez « + » pour ajouter votre premier achat.'); return; }
+  if(!state.investments.length){ if(fc) fc.innerHTML=''; card.innerHTML='<div class="card">'+emptyBlock('▤','Aucune position','Cliquez « + » pour ajouter votre premier achat.')+'</div>'; return; }
   const present=METAL_ORDER.filter(m=>state.investments.some(p=>p.metal===m));
   if(posFilter!=='all'&&!present.includes(posFilter)) posFilter='all';
   if(fc){ fc.innerHTML = present.length>1 ? [{k:'all',lbl:'Tout'}].concat(present.map(m=>({k:m,lbl:METALS[m].name}))).map(c=>`<button data-k="${c.k}" class="${c.k===posFilter?'on':''}">${c.lbl}</button>`).join('') : '';
@@ -1073,7 +1095,7 @@ function renderPositions(){
   sorted.sort((a,b)=>((b.sold?b.soldDate:b.date)||b.date||'').localeCompare((a.sold?a.soldDate:a.date)||a.date||''));
   const active=sorted.filter(p=>!p.sold), soldLots=sorted.filter(p=>p.sold);
   card.innerHTML='';
-  if(!active.length) card.innerHTML=emptyBlock('▤','Aucune position détenue', soldLots.length?'Toutes vos positions sont vendues.':'Ajoutez votre premier achat.');
+  if(!active.length) card.innerHTML='<div class="card">'+emptyBlock('▤','Aucune position détenue', soldLots.length?'Toutes vos positions sont vendues.':'Ajoutez votre premier achat.')+'</div>';
   for(const p of active) card.appendChild(posRowEl(p));
   const sec=$('#soldSection'), sc=$('#soldCard');
   if(soldLots.length){ sec.style.display=''; $('#soldCount').textContent=soldLots.length+' vendue(s)'; sc.innerHTML=''; for(const p of soldLots) sc.appendChild(posRowEl(p)); }
@@ -1083,28 +1105,33 @@ function posRowEl(p){
   const m=p.metal, price=spotUsd(m), q=+p.qty||0;
   const el=document.createElement('div'); el.className='pos'+(p.sold?' sold':''); el.dataset.id=p.id;
   const clip=(invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':'')+((p.details&&p.details.length)?' <span class="clip">ℹ️'+p.details.length+'</span>':'');
+  const thumb=thumbForPos(p.id); let thumbUrl=null, media;
+  if(thumb){ thumbUrl=URL.createObjectURL(thumb.blob); _posThumbUrls.push(thumbUrl);
+    media=`<div class="pthumb"><img src="${thumbUrl}" alt=""><span class="dot" style="background:${METALS[m].c}"></span></div>`; }
+  else media=`<div class="badge ${m}${p.sold?' dim':''}">${METALS[m].ab}</div>`;
   if(p.sold){
     const cost=lotCost(p), proceeds=+p.soldTotal||0, realized=proceeds-cost, up=realized>=0;
-    el.innerHTML=`<div class="badge ${m} dim">${METALS[m].ab}</div>
+    el.innerHTML=`${media}
       <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(110,168,255,.16);color:var(--accent)">VENDU</span>${clip}</div>
         <div class="meta">${p.soldDate||'—'} · coût ${fmtMoney(cost)}${p.note?' · '+escapeHtml(p.note):''}</div></div>
       <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
         <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
   } else if(isSell(p)){
     const avg=metalTotals(m).avg, sp=+p.price||0, proceeds=sp*q, realized=(sp-avg)*q, up=realized>=0;
-    el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
+    el.innerHTML=`${media}
       <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(255,111,120,.15);color:var(--down)">VENTE</span>${clip}</div>
         <div class="meta">${p.date||'—'} · vendu ${fmtMoney(sp)}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
       <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
         <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
   } else {
     const buy=+p.price||0, prem=+p.premium||0, cost=(buy+prem)*q, val=q*price, pl=val-cost, pct=cost>0?pl/cost*100:0, up=pl>=0;
-    el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
+    el.innerHTML=`${media}
       <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}${clip}</div>
         <div class="meta">${p.date||'—'} · achat ${fmtMoney(buy)}${prem>0?' +'+fmtMoney(prem)+' prime':''}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
       <div class="rt"><div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
         <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div></div>`;
   }
+  if(thumbUrl){ const pt=el.querySelector('.pthumb'); if(pt) bindThumbPreview(pt,thumbUrl); }
   el.addEventListener('click',()=>openPosSheet(p.id));
   return el;
 }
@@ -1129,9 +1156,20 @@ const IDB = {
   clear(){ return IDB._store('readwrite').then(st=>new Promise((res,rej)=>{ const r=st.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); })); },
 };
 
-let invoiceCache=[], _facUrls=[], _posFacUrls=[], _facPrevUrl=null;
-function invCountFor(posId){ if(!posId) return 0; let n=0; for(const iv of invoiceCache) if(iv.positionId===posId) n++; return n; }
+let invoiceCache=[], _facUrls=[], _posFacUrls=[], _facPrevUrl=null, _posThumbUrls=[];
+function bindThumbPreview(el,url){
+  const pv=$('#imgPreview'), img=pv&&pv.querySelector('img'); if(!pv||!img) return;
+  if(!matchMedia('(hover:hover)').matches) return;
+  const move=(ev)=>{ const w=pv.offsetWidth||220, h=pv.offsetHeight||220; let x=ev.clientX+18, y=ev.clientY+18;
+    if(x+w>innerWidth-8) x=ev.clientX-w-18; if(y+h>innerHeight-8) y=innerHeight-h-8; if(y<8) y=8; pv.style.left=x+'px'; pv.style.top=y+'px'; };
+  el.addEventListener('mouseenter',(ev)=>{ img.src=url; pv.classList.add('on'); move(ev); });
+  el.addEventListener('mousemove',move);
+  el.addEventListener('mouseleave',()=>{ pv.classList.remove('on'); });
+}
+function invCountFor(posId){ if(!posId) return 0; let n=0; for(const iv of invoiceCache) if(iv.positionId===posId&&iv.kind!=='photo') n++; return n; }
 function isImg(rec){ return (rec.mime||'').startsWith('image/'); }
+function photoForPos(posId){ if(!posId) return null; return invoiceCache.find(iv=>iv.positionId===posId&&iv.kind==='photo'&&isImg(iv))||null; }
+function thumbForPos(posId){ if(!posId) return null; return photoForPos(posId)||invoiceCache.find(iv=>iv.positionId===posId&&isImg(iv))||null; }
 function extOf(rec){ const n=rec.fname||''; const dot=n.lastIndexOf('.'); if(dot>0) return n.slice(dot+1).toUpperCase(); if((rec.mime||'').includes('pdf')) return 'PDF'; return 'FICHIER'; }
 function fmtAmt(a,cur){ if(!(a>0)) return ''; try{ return a.toLocaleString('fr-CA',{maximumFractionDigits:2})+' '+cur; }catch(e){ return a+' '+cur; } }
 function posShort(p){ if(!p) return ''; return `${METALS[p.metal]?METALS[p.metal].name:p.metal} · ${fmtOz(+p.qty||0)} oz${isSell(p)?' (vente)':''}`; }
@@ -1159,9 +1197,9 @@ function renderInvoices(){
     const p=rec.positionId?state.investments.find(x=>x.id===rec.positionId):null;
     const line2=[fmtAmt(rec.amount,rec.cur), rec.metal&&METALS[rec.metal]?METALS[rec.metal].name:'', rec.invDate?fmtDate(rec.invDate,true):''].filter(Boolean).join(' · ');
     return `<div class="faccard" data-id="${rec.id}">
-      <div class="thumb" data-open="${rec.id}">${thumb}<span class="ext">${extOf(rec)}</span></div>
+      <div class="thumb" data-open="${rec.id}">${thumb}<span class="ext">${rec.kind==='photo'?'PHOTO':extOf(rec)}</span></div>
       <div class="body">
-        <div class="fn">${escapeHtml(rec.fname||'facture')}</div>
+        <div class="fn">${rec.kind==='photo'?'<span class="clip">Photo produit</span> ':''}${escapeHtml(rec.fname||'facture')}</div>
         ${line2?`<div class="mt">${escapeHtml(line2)}</div>`:''}
         ${rec.note?`<div class="mt">${escapeHtml(rec.note)}</div>`:''}
         ${p?`<div class="lk">🔗 ${escapeHtml(posShort(p))}</div>`:''}
@@ -1230,7 +1268,7 @@ let posStagedFiles=[];
 function renderPosFacChips(){
   const box=$('#posFacChips'); if(!box) return;
   _posFacUrls.forEach(u=>URL.revokeObjectURL(u)); _posFacUrls=[];
-  const linked = editId? invoiceCache.filter(iv=>iv.positionId===editId) : [];
+  const linked = editId? invoiceCache.filter(iv=>iv.positionId===editId&&iv.kind!=='photo') : [];
   let html='';
   for(const iv of linked){ let mini; if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posFacUrls.push(u); mini=`<img class="mini" src="${u}" alt="">`; } else mini='<span class="doc">📄</span>';
     html+=`<span class="facchip">${mini}<span>${escapeHtml(iv.fname||'facture')}</span><span class="x" data-detach="${iv.id}" title="Détacher (reste dans Factures)">×</span></span>`; }
@@ -1247,8 +1285,35 @@ $('#posFacFileIn').addEventListener('change',e=>{ const files=[...e.target.files
 function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise.resolve();
   const files=posStagedFiles; posStagedFiles=[];
   const today=new Date().toISOString().slice(0,10);
-  return Promise.all(files.map(f=>IDB.put({ id:uid(), blob:f, mime:f.type||'application/octet-stream', fname:f.name||'facture', size:f.size||0, addedAt:Date.now(),
+  return Promise.all(files.map(f=>IDB.put({ id:uid(), kind:'invoice', blob:f, mime:f.type||'application/octet-stream', fname:f.name||'facture', size:f.size||0, addedAt:Date.now(),
     invDate:($('#fDate').value||today), amount:(e?e.rawPrice:0)||0, cur:(e?e.cur:state.currency), metal:selMetal, positionId:posId, note:'' })));
+}
+
+/* ---- photo du produit ---- */
+let posStagedPhoto=null, posPhotoRemove=false, _posPhotoUrl=null;
+function renderPosPhoto(){
+  const pv=$('#posPhotoPrev'), del=$('#posPhotoDel'); if(!pv) return;
+  if(_posPhotoUrl){ URL.revokeObjectURL(_posPhotoUrl); _posPhotoUrl=null; }
+  let blob=null;
+  if(posStagedPhoto) blob=posStagedPhoto;
+  else if(editId && !posPhotoRemove){ const ph=photoForPos(editId); if(ph) blob=ph.blob; }
+  if(blob){ _posPhotoUrl=URL.createObjectURL(blob); pv.innerHTML=`<img src="${_posPhotoUrl}" alt="">`; del.style.display=''; $('#posPhotoBtn').textContent='📷 Changer la photo'; }
+  else { pv.innerHTML='📷'; del.style.display='none'; $('#posPhotoBtn').textContent='📷 Choisir une photo'; }
+}
+$('#posPhotoBtn').addEventListener('click',()=>$('#posPhotoIn').click());
+$('#posPhotoIn').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(f.size>25*1048576){ toast('Image trop volumineuse (max 25 Mo)','err'); return; }
+  posStagedPhoto=f; posPhotoRemove=false; renderPosPhoto(); });
+$('#posPhotoDel').addEventListener('click',()=>{ posStagedPhoto=null; posPhotoRemove=true; renderPosPhoto(); });
+function flushPosPhoto(posId){
+  const jobs=[];
+  if(posStagedPhoto || posPhotoRemove){ // remplace/retire : supprimer l'ancienne photo
+    invoiceCache.filter(iv=>iv.positionId===posId&&iv.kind==='photo').forEach(iv=>jobs.push(IDB.del(iv.id))); }
+  if(posStagedPhoto){ const f=posStagedPhoto;
+    jobs.push(IDB.put({ id:uid(), kind:'photo', blob:f, mime:f.type||'image/jpeg', fname:f.name||'photo', size:f.size||0, addedAt:Date.now(),
+      invDate:'', amount:0, cur:state.currency, metal:selMetal, positionId:posId, note:'Photo du produit' })); }
+  posStagedPhoto=null; posPhotoRemove=false;
+  return jobs.length?Promise.all(jobs):Promise.resolve();
 }
 
 /* ============================================================
@@ -1446,7 +1511,7 @@ function readPosDetails(){ return $$('#posDetails .detrow').map(r=>({k:r.querySe
 $('#posDetAdd').addEventListener('click',()=>addDetailRow('',''));
 
 function openPosSheet(id){
-  editId=id||null; posStagedFiles=[]; const del=$('#delPos'); fillCurSelect($('#fCur')); fillCurSelect($('#fSoldCur'));
+  editId=id||null; posStagedFiles=[]; posStagedPhoto=null; posPhotoRemove=false; const del=$('#delPos'); fillCurSelect($('#fCur')); fillCurSelect($('#fSoldCur'));
   if(id){ const p=state.investments.find(x=>x.id===id); if(!p) return;
     $('#posSheetTitle').textContent='Modifier la position';
     setSegType(isSell(p)?'sell':'buy'); setSegMetal($('#metalSeg'),p.metal);
@@ -1471,7 +1536,7 @@ function openPosSheet(id){
     $('#fSold').checked=false; $('#fSoldDate').value=''; $('#fSoldTotal').value=''; $('#fSoldCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
     renderPosDetails([]);
   }
-  updatePosUI(); renderPosFacChips(); openSheet($('#posSheet'));
+  updatePosUI(); renderPosFacChips(); renderPosPhoto(); openSheet($('#posSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
 }
 $('#savePos').addEventListener('click',()=>{
@@ -1493,7 +1558,7 @@ $('#savePos').addEventListener('click',()=>{
   if(editId){ posId=editId; Object.assign(state.investments.find(x=>x.id===editId),rec); toast('Position modifiée','ok'); }
   else{ rec.id=uid(); rec.createdAt=Date.now(); state.investments.push(rec); posId=rec.id; toast(e.type==='sell'?'Vente enregistrée':'Position ajoutée','ok'); }
   save(K.inv,state.investments); recordSnapshot();
-  flushStagedInvoices(posId,e).then(()=>loadInvoices()).catch(()=>{});
+  Promise.all([flushStagedInvoices(posId,e),flushPosPhoto(posId)]).then(()=>loadInvoices()).catch(()=>{});
   closeSheet(); renderAll();
 });
 $('#delPos').addEventListener('click',()=>{ const id=editId;
