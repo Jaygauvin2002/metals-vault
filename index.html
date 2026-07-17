@@ -1318,16 +1318,12 @@ function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise
 
 /* ---- photos du produit : grille de tuiles (clic / coller ⌘V / glisser-déposer) ---- */
 let posStagedPhotos=[], posRemovedPhotoIds=[];
-// --- Conversion HEIC (iPhone) : convertisseur chargé à la demande depuis un CDN ---
+// --- Conversion HEIC (iPhone) : décodeur libheif moderne chargé à la demande ---
 function isHeic(f){ const t=(f.type||'').toLowerCase(); return t.includes('heic')||t.includes('heif')||/\.(heic|heif)$/i.test(f.name||''); }
-let _heicLib=null;
-function loadHeic(){ if(_heicLib) return _heicLib; _heicLib=new Promise((res,rej)=>{
-  if(window.heic2any) return res(window.heic2any);
-  const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
-  s.onload=()=>window.heic2any?res(window.heic2any):rej(new Error('heic')); s.onerror=()=>{ _heicLib=null; rej(new Error('heic-load')); };
-  document.head.appendChild(s); }); return _heicLib; }
+let _heicMod=null, lastMediaErr='';
+function loadHeic(){ if(_heicMod) return _heicMod; _heicMod=import('https://cdn.jsdelivr.net/npm/heic-to/+esm').catch(e=>{ _heicMod=null; throw e; }); return _heicMod; }
 async function toDecodable(f){ if(!isHeic(f)) return f;
-  const h=await loadHeic(); const out=await h({blob:f,toType:'image/jpeg',quality:0.9}); return Array.isArray(out)?out[0]:out; }
+  const mod=await loadHeic(); const out=await mod.heicTo({blob:f,type:'image/jpeg',quality:0.9}); return Array.isArray(out)?out[0]:out; }
 // Re-encode une image en JPEG via canvas (HEIC converti d'abord si besoin). Résout en Blob, ou rejette si indécodable.
 async function normalizeImage(file){ const src=await toDecodable(file); return _canvasJpeg(src); }
 function _canvasJpeg(file){ return new Promise((resolve,reject)=>{
@@ -1348,14 +1344,14 @@ async function prepAttachment(f){ if(looksImage(f)){ const b=await normalizeImag
 async function addPhotoFiles(files){
   const imgs=[...files].filter(looksImage);
   if(!imgs.length){ toast('Aucune image détectée','err'); return; }
-  if(imgs.some(isHeic)) toast('Conversion des photos HEIC…','info',2000);
+  if(imgs.some(isHeic)) toast('Conversion des photos HEIC…','info',3000);
   let ok=0, fail=0;
-  for(const f of imgs){ if(f.size>40*1048576){ fail++; continue; }
+  for(const f of imgs){ if(f.size>40*1048576){ fail++; lastMediaErr='fichier > 40 Mo'; continue; }
     try{ const b=await normalizeImage(f); posStagedPhotos.push(toJpegFile(b,f.name)); ok++; }
-    catch(e){ fail++; } }
+    catch(e){ fail++; lastMediaErr=String(e&&e.message||e); } }
   renderPosMedia();
   if(ok) toast(ok>1?ok+' photos ajoutées':'Photo ajoutée','ok',1400);
-  if(fail) toast(fail+' image(s) au format non lisible (HEIC ?). Convertissez en JPG/PNG.','err',4200);
+  if(fail) toast(fail+' image(s) non ajoutée(s). '+(lastMediaErr?'Détail : '+lastMediaErr.slice(0,90):'Format non lisible.'),'err',7000);
 }
 function renderPosMedia(){
   const grid=$('#posMediaGrid'); if(!grid) return;
