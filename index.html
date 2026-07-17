@@ -346,6 +346,16 @@
   .chkrow .sub{font-size:11.5px;color:var(--mut);font-weight:500}
   .pos.sold{opacity:.82}
   .pos .badge.dim{filter:grayscale(.35) brightness(.9)}
+  .media-grid{display:flex;flex-wrap:wrap;gap:10px;border-radius:14px;transition:background .15s,box-shadow .15s;padding:2px}
+  .media-grid.drag{background:rgba(110,168,255,.10);box-shadow:0 0 0 2px var(--accent) inset}
+  .media-tile{width:78px;height:78px;border-radius:13px;position:relative;flex:0 0 auto;overflow:hidden;border:1px solid var(--line2);background:var(--bg2)}
+  .media-tile img{width:100%;height:100%;object-fit:cover;display:block}
+  .media-tile .badge2{position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:800;letter-spacing:.3px;background:var(--accent);color:#0b1020;padding:1px 5px;border-radius:5px}
+  .media-tile .x{position:absolute;top:3px;right:3px;width:21px;height:21px;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;font-size:14px;font-weight:800;display:grid;place-items:center;cursor:pointer;line-height:1}
+  .media-tile .x:hover{background:var(--down)}
+  .media-add{width:78px;height:78px;border-radius:13px;flex:0 0 auto;border:1.5px dashed var(--line2);background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:26px;color:var(--mut);cursor:pointer;transition:.15s;line-height:1}
+  .media-add:hover,.media-add:focus{border-color:var(--accent);color:var(--accent);outline:none}
+  .media-add .mini-lbl{font-size:9px;font-weight:700;letter-spacing:.2px}
   .detrow{display:flex;gap:8px;margin-bottom:8px;align-items:center}
   .detrow input{min-width:0}
   .detrow .dk{flex:0 0 42%}
@@ -357,10 +367,6 @@
   .det-view .r:last-child{border-bottom:0}
   .det-view .r .k{color:var(--mut)}
   .det-view .r .v{color:var(--tx);font-weight:600;text-align:right;word-break:break-word}
-  .photorow{display:flex;gap:12px;align-items:center}
-  .photorow .pv{width:64px;height:64px;border-radius:13px;flex:0 0 auto;overflow:hidden;background:var(--bg2);border:1px solid var(--line2);display:grid;place-items:center;color:var(--mut);font-size:24px}
-  .photorow .pv img{width:100%;height:100%;object-fit:cover;display:block}
-  .photorow .btns{flex:1;display:flex;flex-direction:column;gap:8px}
   .hcol{min-width:0}
 
   /* ============ MODE BUREAU (Mac) ============ */
@@ -577,14 +583,8 @@
   </div>
   <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
   <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
-  <div class="field"><label>Photo du produit <span class="hint">(pour différencier vos pièces, optionnel)</span></label>
-    <div class="photorow">
-      <div class="pv" id="posPhotoPrev">📷</div>
-      <div class="btns">
-        <button class="btn sm" type="button" id="posPhotoBtn" style="width:100%">📷 Choisir une photo</button>
-        <button class="btn sm ghost" type="button" id="posPhotoDel" style="width:100%;display:none">Retirer la photo</button>
-      </div>
-    </div></div>
+  <div class="field"><label>Photos du produit <span class="hint">(cliquez le +, collez ⌘V, ou glissez-déposez — optionnel)</span></label>
+    <div class="media-grid" id="posMediaGrid"></div></div>
   <div class="field"><label>Détails <span class="hint">(n° de coulée, série, raffineur… optionnel)</span></label>
     <div id="posDetails"></div>
     <button class="btn sm" type="button" id="posDetAdd" style="width:100%">+ Ajouter une info</button></div>
@@ -652,7 +652,7 @@
 <input type="file" id="fileIn" class="file-in" accept="application/json,.json">
 <input type="file" id="facFileIn" class="file-in" accept="image/*,application/pdf" multiple>
 <input type="file" id="posFacFileIn" class="file-in" accept="image/*,application/pdf" multiple>
-<input type="file" id="posPhotoIn" class="file-in" accept="image/*">
+<input type="file" id="posPhotoIn" class="file-in" accept="image/*" multiple>
 <div id="imgPreview"><img alt=""></div>
 <div id="toasts"></div>
 
@@ -1309,30 +1309,47 @@ function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise
     invDate:($('#fDate').value||today), amount:(e?e.rawPrice:0)||0, cur:(e?e.cur:state.currency), metal:selMetal, positionId:posId, note:'' })));
 }
 
-/* ---- photo du produit ---- */
-let posStagedPhoto=null, posPhotoRemove=false, _posPhotoUrl=null;
-function renderPosPhoto(){
-  const pv=$('#posPhotoPrev'), del=$('#posPhotoDel'); if(!pv) return;
-  if(_posPhotoUrl){ URL.revokeObjectURL(_posPhotoUrl); _posPhotoUrl=null; }
-  let blob=null;
-  if(posStagedPhoto) blob=posStagedPhoto;
-  else if(editId && !posPhotoRemove){ const ph=photoForPos(editId); if(ph) blob=ph.blob; }
-  if(blob){ _posPhotoUrl=URL.createObjectURL(blob); pv.innerHTML=`<img src="${_posPhotoUrl}" alt="">`; del.style.display=''; $('#posPhotoBtn').textContent='📷 Changer la photo'; }
-  else { pv.innerHTML='📷'; del.style.display='none'; $('#posPhotoBtn').textContent='📷 Choisir une photo'; }
+/* ---- photos du produit : grille de tuiles (clic / coller ⌘V / glisser-déposer) ---- */
+let posStagedPhotos=[], posRemovedPhotoIds=[], _posPhotoUrls=[];
+function addPhotoFiles(files){
+  const imgs=[...files].filter(f=>(f.type||'').startsWith('image/'));
+  if(!imgs.length){ toast('Aucune image détectée','err'); return; }
+  const tooBig=imgs.find(f=>f.size>25*1048576); if(tooBig){ toast('Image trop volumineuse (max 25 Mo)','err'); return; }
+  posStagedPhotos.push(...imgs); renderPosMedia();
+  toast(imgs.length>1?imgs.length+' photos ajoutées':'Photo ajoutée','ok',1400);
 }
-$('#posPhotoBtn').addEventListener('click',()=>$('#posPhotoIn').click());
-$('#posPhotoIn').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
-  if(f.size>25*1048576){ toast('Image trop volumineuse (max 25 Mo)','err'); return; }
-  posStagedPhoto=f; posPhotoRemove=false; renderPosPhoto(); });
-$('#posPhotoDel').addEventListener('click',()=>{ posStagedPhoto=null; posPhotoRemove=true; renderPosPhoto(); });
-function flushPosPhoto(posId){
+function renderPosMedia(){
+  const grid=$('#posMediaGrid'); if(!grid) return;
+  _posPhotoUrls.forEach(u=>URL.revokeObjectURL(u)); _posPhotoUrls=[];
+  const existing = editId? invoiceCache.filter(iv=>iv.positionId===editId&&iv.kind==='photo'&&!posRemovedPhotoIds.includes(iv.id)) : [];
+  let html='';
+  for(const iv of existing){ let inner='📄'; if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posPhotoUrls.push(u); inner=`<img src="${u}" alt="">`; }
+    html+=`<div class="media-tile">${inner}<span class="x" data-rmph="${iv.id}" title="Retirer">×</span></div>`; }
+  posStagedPhotos.forEach((f,i)=>{ const u=URL.createObjectURL(f); _posPhotoUrls.push(u);
+    html+=`<div class="media-tile"><img src="${u}" alt=""><span class="badge2">NOUV.</span><span class="x" data-rmst="${i}" title="Retirer">×</span></div>`; });
+  html+=`<div class="media-add" id="posMediaAdd" tabindex="0" title="Ajouter : clic, ⌘V ou glisser-déposer">+<span class="mini-lbl">photo</span></div>`;
+  grid.innerHTML=html;
+  $$('[data-rmph]',grid).forEach(el=>el.addEventListener('click',()=>{ posRemovedPhotoIds.push(el.dataset.rmph); renderPosMedia(); }));
+  $$('[data-rmst]',grid).forEach(el=>el.addEventListener('click',()=>{ posStagedPhotos.splice(+el.dataset.rmst,1); renderPosMedia(); }));
+  const add=$('#posMediaAdd'); if(add){ add.addEventListener('click',()=>$('#posPhotoIn').click());
+    add.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#posPhotoIn').click(); } }); }
+}
+$('#posPhotoIn').addEventListener('change',e=>{ const files=[...e.target.files]; e.target.value=''; if(files.length) addPhotoFiles(files); });
+(function(){ const grid=$('#posMediaGrid'); if(!grid) return;
+  ['dragenter','dragover'].forEach(ev=>grid.addEventListener(ev,e=>{ if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){ e.preventDefault(); grid.classList.add('drag'); } }));
+  ['dragleave','dragend'].forEach(ev=>grid.addEventListener(ev,e=>{ if(e.target===grid) grid.classList.remove('drag'); }));
+  grid.addEventListener('drop',e=>{ e.preventDefault(); grid.classList.remove('drag'); if(e.dataTransfer&&e.dataTransfer.files.length) addPhotoFiles(e.dataTransfer.files); });
+})();
+document.addEventListener('paste',e=>{ if(!(openSheetEl&&openSheetEl.id==='posSheet')) return;
+  const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
+  const files=[]; for(const it of items){ if(it.kind==='file'&&(it.type||'').startsWith('image/')){ const f=it.getAsFile(); if(f) files.push(f); } }
+  if(files.length){ e.preventDefault(); addPhotoFiles(files); } });
+function flushPosPhotos(posId){
   const jobs=[];
-  if(posStagedPhoto || posPhotoRemove){ // remplace/retire : supprimer l'ancienne photo
-    invoiceCache.filter(iv=>iv.positionId===posId&&iv.kind==='photo').forEach(iv=>jobs.push(IDB.del(iv.id))); }
-  if(posStagedPhoto){ const f=posStagedPhoto;
-    jobs.push(IDB.put({ id:uid(), kind:'photo', blob:f, mime:f.type||'image/jpeg', fname:f.name||'photo', size:f.size||0, addedAt:Date.now(),
-      invDate:'', amount:0, cur:state.currency, metal:selMetal, positionId:posId, note:'Photo du produit' })); }
-  posStagedPhoto=null; posPhotoRemove=false;
+  posRemovedPhotoIds.forEach(id=>jobs.push(IDB.del(id)));
+  posStagedPhotos.forEach(f=>jobs.push(IDB.put({ id:uid(), kind:'photo', blob:f, mime:f.type||'image/jpeg', fname:f.name||'photo', size:f.size||0, addedAt:Date.now(),
+    invDate:'', amount:0, cur:state.currency, metal:selMetal, positionId:posId, note:'Photo du produit' })));
+  posStagedPhotos=[]; posRemovedPhotoIds=[];
   return jobs.length?Promise.all(jobs):Promise.resolve();
 }
 
@@ -1531,7 +1548,7 @@ function readPosDetails(){ return $$('#posDetails .detrow').map(r=>({k:r.querySe
 $('#posDetAdd').addEventListener('click',()=>addDetailRow('',''));
 
 function openPosSheet(id){
-  editId=id||null; posStagedFiles=[]; posStagedPhoto=null; posPhotoRemove=false; const del=$('#delPos'); fillCurSelect($('#fCur')); fillCurSelect($('#fSoldCur'));
+  editId=id||null; posStagedFiles=[]; posStagedPhotos=[]; posRemovedPhotoIds=[]; const del=$('#delPos'); fillCurSelect($('#fCur')); fillCurSelect($('#fSoldCur'));
   if(id){ const p=state.investments.find(x=>x.id===id); if(!p) return;
     $('#posSheetTitle').textContent='Modifier la position';
     setSegType(isSell(p)?'sell':'buy'); setSegMetal($('#metalSeg'),p.metal);
@@ -1556,7 +1573,7 @@ function openPosSheet(id){
     $('#fSold').checked=false; $('#fSoldDate').value=''; $('#fSoldTotal').value=''; $('#fSoldCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
     renderPosDetails([]);
   }
-  updatePosUI(); renderPosFacChips(); renderPosPhoto(); openSheet($('#posSheet'));
+  updatePosUI(); renderPosFacChips(); renderPosMedia(); openSheet($('#posSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
 }
 $('#savePos').addEventListener('click',()=>{
@@ -1578,7 +1595,7 @@ $('#savePos').addEventListener('click',()=>{
   if(editId){ posId=editId; Object.assign(state.investments.find(x=>x.id===editId),rec); toast('Position modifiée','ok'); }
   else{ rec.id=uid(); rec.createdAt=Date.now(); state.investments.push(rec); posId=rec.id; toast(e.type==='sell'?'Vente enregistrée':'Position ajoutée','ok'); }
   save(K.inv,state.investments); recordSnapshot();
-  Promise.all([flushStagedInvoices(posId,e),flushPosPhoto(posId)]).then(()=>loadInvoices()).catch(()=>{});
+  Promise.all([flushStagedInvoices(posId,e),flushPosPhotos(posId)]).then(()=>loadInvoices()).catch(()=>{});
   closeSheet(); renderAll();
 });
 $('#delPos').addEventListener('click',()=>{ const id=editId;
