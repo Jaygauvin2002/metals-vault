@@ -1281,6 +1281,7 @@ async function loadInvoices(){
   try{ invoiceCache=await IDB.all(); }catch(e){ invoiceCache=[]; }
   invoiceCache.sort((a,b)=>String(b.invDate||'').localeCompare(String(a.invDate||''))|| (b.addedAt||0)-(a.addedAt||0));
   pruneBlobUrls(); renderInvoices(); renderPositions(); updateFactStorage();
+  if(typeof supaReady!=='undefined'&&supaReady&&supaUser&&!applyingRemote) markDirty();
 }
 function updateFactStorage(){
   const el=$('#factStorage'); if(!el) return;
@@ -1902,11 +1903,10 @@ function renderAccount(){
           <input id="loginEmail" type="email" placeholder="ton@courriel.com" autocomplete="email" style="flex:1;min-width:190px;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none">
           <button class="btn sm" id="btnMagic" style="white-space:nowrap">Recevoir le lien</button>
         </div>
-        <button class="btn sm" id="btnGoogle" style="width:100%">Continuer avec Google</button>
+        <div class="muted" style="font-size:12px">Un lien de connexion t'est envoyé par courriel — aucun mot de passe à retenir.</div>
       </div>`;
     $('#btnMagic').addEventListener('click',sendMagicLink);
     $('#loginEmail').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendMagicLink(); } });
-    $('#btnGoogle').addEventListener('click',signInGoogle);
   }
 }
 async function sendMagicLink(){ if(!supa) return; const email=($('#loginEmail').value||'').trim();
@@ -1928,11 +1928,12 @@ function localStamp(){ return +localStorage.getItem('mv_syncStamp')||0; }
 function markDirty(){ if(applyingRemote) return; try{ localStorage.setItem('mv_syncStamp',String(Date.now())); }catch(e){}
   if(!(supaReady&&supaUser)) return; clearTimeout(syncTimer); syncTimer=setTimeout(pushState,1800); }
 function collectState(){ return { investments:state.investments, alerts:state.alerts, snapshots:state.snapshots,
-  currency:state.currency, taxRate:state.taxRate, marginalRate:state.marginalRate, ratioA:state.ratioA, ratioB:state.ratioB }; }
+  currency:state.currency, taxRate:state.taxRate, marginalRate:state.marginalRate, ratioA:state.ratioA, ratioB:state.ratioB,
+  attachments:attachMeta() }; }
 async function pushState(){ if(!(supaReady&&supaUser)||syncing||applyingRemote) return; syncing=true; setSyncStatus('syncing');
   try{ const stamp=localStamp()||Date.now();
     const {error}=await supa.from('user_state').upsert({user_id:supaUser.id,data:collectState(),updated_at:new Date(stamp).toISOString()},{onConflict:'user_id'});
-    if(error) throw error; setSyncStatus('ok'); }
+    if(error) throw error; setSyncStatus('ok'); uploadPending(); }
   catch(e){ setSyncStatus('err'); }
   finally{ syncing=false; } }
 async function pullState(){ if(!(supaReady&&supaUser)||pulling) return; pulling=true; setSyncStatus('syncing');
@@ -1962,9 +1963,24 @@ function applyRemote(d,stamp){
     try{ localStorage.setItem('mv_syncStamp',String(stamp)); }catch(e){}
     $('#curLabel').textContent=state.currency; renderAll(); loadInvoices();
   } finally{ applyingRemote=false; }
+  downloadMissing(d.attachments);
   toast('Données récupérées depuis le cloud','ok',3000);
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'&&supaReady&&supaUser) pushState(); });
+
+/* ---- synchro des fichiers (factures/photos) via Supabase Storage ---- */
+const BUCKET='attachments';
+function attachMeta(){ return invoiceCache.map(r=>({ id:r.id, kind:r.kind||'invoice', mime:r.mime, fname:r.fname, size:r.size, addedAt:r.addedAt, invDate:r.invDate, amount:r.amount, cur:r.cur, metal:r.metal, positionId:r.positionId, note:r.note })); }
+async function uploadPending(){ if(!(supaReady&&supaUser)) return;
+  for(const rec of [...invoiceCache]){ if(rec.uploaded||!rec.blob) continue;
+    try{ const {error}=await supa.storage.from(BUCKET).upload(supaUser.id+'/'+rec.id, rec.blob, {upsert:true, contentType:rec.mime||'application/octet-stream'});
+      if(error) throw error; rec.uploaded=true; await IDB.put(rec); }catch(e){} } }
+async function downloadMissing(remoteMeta){ if(!(supaReady&&supaUser)||!Array.isArray(remoteMeta)) return;
+  const localIds=new Set(invoiceCache.map(r=>r.id)); let got=false;
+  for(const meta of remoteMeta){ if(!meta||!meta.id||localIds.has(meta.id)) continue;
+    try{ const {data,error}=await supa.storage.from(BUCKET).download(supaUser.id+'/'+meta.id); if(error||!data) continue;
+      await IDB.put(Object.assign({},meta,{blob:data,uploaded:true})); got=true; }catch(e){} }
+  if(got) loadInvoices(); }
 
 /* ---- boot ---- */
 $('#curLabel').textContent=state.currency;
