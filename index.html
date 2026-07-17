@@ -336,6 +336,17 @@
   .chkrow .sub{font-size:11.5px;color:var(--mut);font-weight:500}
   .pos.sold{opacity:.82}
   .pos .badge.dim{filter:grayscale(.35) brightness(.9)}
+  .detrow{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+  .detrow input{min-width:0}
+  .detrow .dk{flex:0 0 42%}
+  .detrow .dv{flex:1}
+  .detrow .x{flex:0 0 auto;width:38px;height:44px;border-radius:11px;background:var(--bg2);border:1px solid var(--line2);color:var(--mut);font-size:18px;font-weight:800;line-height:1}
+  .detrow .x:hover{color:var(--down);border-color:rgba(255,111,120,.4)}
+  .det-view{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:2px 0;margin-top:6px}
+  .det-view .r{display:flex;justify-content:space-between;gap:12px;padding:8px 13px;border-bottom:1px solid var(--line);font-size:13px}
+  .det-view .r:last-child{border-bottom:0}
+  .det-view .r .k{color:var(--mut)}
+  .det-view .r .v{color:var(--tx);font-weight:600;text-align:right;word-break:break-word}
   .hcol{min-width:0}
 
   /* ============ MODE BUREAU (Mac) ============ */
@@ -552,6 +563,14 @@
   </div>
   <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
   <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
+  <div class="field"><label>Détails <span class="hint">(n° de coulée, série, raffineur… optionnel)</span></label>
+    <div id="posDetails"></div>
+    <button class="btn sm" type="button" id="posDetAdd" style="width:100%">+ Ajouter une info</button></div>
+  <datalist id="detSuggest">
+    <option value="N° de coulée"></option><option value="N° de série"></option><option value="Raffineur / Fabricant"></option>
+    <option value="Pureté"></option><option value="Poids"></option><option value="Emplacement"></option>
+    <option value="Vendeur"></option><option value="Certificat"></option>
+  </datalist>
   <div class="field"><label>Factures <span class="hint">(photo ou PDF, optionnel)</span></label>
     <div class="facchips" id="posFacChips"></div>
     <button class="btn sm" type="button" id="posFacAdd" style="width:100%">📎 Joindre une facture</button></div>
@@ -1063,7 +1082,7 @@ function renderPositions(){
 function posRowEl(p){
   const m=p.metal, price=spotUsd(m), q=+p.qty||0;
   const el=document.createElement('div'); el.className='pos'+(p.sold?' sold':''); el.dataset.id=p.id;
-  const clip=invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':'';
+  const clip=(invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':'')+((p.details&&p.details.length)?' <span class="clip">ℹ️'+p.details.length+'</span>':'');
   if(p.sold){
     const cost=lotCost(p), proceeds=+p.soldTotal||0, realized=proceeds-cost, up=realized>=0;
     el.innerHTML=`<div class="badge ${m} dim">${METALS[m].ab}</div>
@@ -1415,6 +1434,17 @@ function updatePosCalc(){
   }
   $('#posCalc').innerHTML=html;
 }
+function addDetailRow(k,v){
+  const row=document.createElement('div'); row.className='detrow';
+  row.innerHTML=`<input class="dk" type="text" list="detSuggest" placeholder="Libellé"><input class="dv" type="text" placeholder="Valeur"><button class="x" type="button" title="Retirer">×</button>`;
+  row.querySelector('.dk').value=k||''; row.querySelector('.dv').value=v||'';
+  row.querySelector('.x').addEventListener('click',()=>row.remove());
+  $('#posDetails').appendChild(row);
+}
+function renderPosDetails(list){ $('#posDetails').innerHTML=''; (Array.isArray(list)?list:[]).forEach(d=>addDetailRow(d.k,d.v)); }
+function readPosDetails(){ return $$('#posDetails .detrow').map(r=>({k:r.querySelector('.dk').value.trim(),v:r.querySelector('.dv').value.trim()})).filter(d=>d.k||d.v); }
+$('#posDetAdd').addEventListener('click',()=>addDetailRow('',''));
+
 function openPosSheet(id){
   editId=id||null; posStagedFiles=[]; const del=$('#delPos'); fillCurSelect($('#fCur')); fillCurSelect($('#fSoldCur'));
   if(id){ const p=state.investments.find(x=>x.id===id); if(!p) return;
@@ -1432,12 +1462,14 @@ function openPosSheet(id){
     const sc=(p.sellEntry&&CURRENCIES.includes(p.sellEntry.cur))?p.sellEntry.cur:cur;
     $('#fSold').checked=!!p.sold; $('#fSoldCur').value=sc;
     $('#fSoldDate').value=p.soldDate||''; $('#fSoldTotal').value=p.sold?((p.sellEntry&&p.sellEntry.amount)||Math.round(usdToCur(+p.soldTotal||0,sc)*100)/100||''):'';
+    renderPosDetails(p.details);
   } else {
     $('#posSheetTitle').textContent='Ajouter une position';
     setSegType('buy'); setSegMetal($('#metalSeg'),'XAU');
     $('#fUnit').value='oz'; $('#fCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
     $('#fQty').value=''; $('#fPrice').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
     $('#fSold').checked=false; $('#fSoldDate').value=''; $('#fSoldTotal').value=''; $('#fSoldCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
+    renderPosDetails([]);
   }
   updatePosUI(); renderPosFacChips(); openSheet($('#posSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
@@ -1451,6 +1483,7 @@ $('#savePos').addEventListener('click',()=>{
   const soldCur=$('#fSoldCur').value, soldAmt=+$('#fSoldTotal').value||0;
   const rec={ type:e.type, metal:selMetal, qty:e.qtyOz, price:e.priceUsdOz, premium:e.premUsdOz,
     date:$('#fDate').value||new Date().toISOString().slice(0,10), note:$('#fNote').value.trim(),
+    details:readPosDetails(),
     entry:{unit:e.unit,cur:e.cur,mode:e.mode,q:e.rawQty,p:e.rawPrice,pr:e.rawPrem},
     sold:isSold,
     soldDate:isSold?($('#fSoldDate').value||new Date().toISOString().slice(0,10)):'',
@@ -1556,7 +1589,7 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
     const inv=Array.isArray(d.investments)?d.investments:null, al=Array.isArray(d.alerts)?d.alerts:[], sn=Array.isArray(d.snapshots)?d.snapshots:[];
     if(!inv&&!al.length) throw new Error('format');
     confirmDialog('Importer cette sauvegarde ?',`${(inv||[]).length} position(s), ${al.length} alerte(s). Vos données actuelles seront remplacées.`,()=>{
-      state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, sold:!!p.sold, soldDate:p.soldDate||'', soldTotal:+p.soldTotal||0, sellEntry:p.sellEntry&&typeof p.sellEntry==='object'?p.sellEntry:null, createdAt:p.createdAt||Date.now() }));
+      state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, sold:!!p.sold, soldDate:p.soldDate||'', soldTotal:+p.soldTotal||0, sellEntry:p.sellEntry&&typeof p.sellEntry==='object'?p.sellEntry:null, details:Array.isArray(p.details)?p.details.map(d=>({k:String(d&&d.k||''),v:String(d&&d.v||'')})).filter(d=>d.k||d.v):[], createdAt:p.createdAt||Date.now() }));
       state.alerts=al.map(a=>({ id:a.id||uid(), metal:(a.metal==='RATIO'||METALS[a.metal])?a.metal:'XAU', dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, createdAt:a.createdAt||Date.now() }));
       state.snapshots=sn.filter(s=>s&&isFinite(s.v)&&s.t).map(s=>({t:s.t,v:+s.v,p:s.p&&typeof s.p==='object'?s.p:undefined}));
       if(d.currency&&CURRENCIES.includes(d.currency)) state.currency=d.currency;
