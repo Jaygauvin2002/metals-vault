@@ -308,6 +308,29 @@
   .muted{color:var(--mut)} .center{text-align:center} .tnum{font-variant-numeric:tabular-nums}
   a{color:var(--accent)}
   .file-in{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+  .facgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:4px}
+  .faccard{background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line);border-radius:15px;overflow:hidden;display:flex;flex-direction:column;transition:transform .1s,border-color .15s}
+  .faccard:hover{border-color:var(--line2);transform:translateY(-2px)}
+  .faccard .thumb{aspect-ratio:4/3;background:var(--bg2);display:grid;place-items:center;overflow:hidden;cursor:pointer;position:relative}
+  .faccard .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .faccard .thumb .doc{font-size:34px;color:var(--mut)}
+  .faccard .thumb .ext{position:absolute;bottom:7px;right:8px;font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--tx);background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px}
+  .faccard .body{padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;gap:3px}
+  .faccard .body .fn{font-weight:700;font-size:13px;color:var(--tx);word-break:break-word;line-height:1.3}
+  .faccard .body .mt{font-size:11.5px;color:var(--mut)}
+  .faccard .body .lk{font-size:11px;color:var(--accent);font-weight:600;margin-top:1px}
+  .faccard .acts{display:flex;gap:6px;padding:0 12px 12px}
+  .faccard .acts button{flex:1;padding:7px;border-radius:9px;border:1px solid var(--line2);background:var(--surf2);font-weight:700;font-size:12px;color:var(--mut);transition:.15s}
+  .faccard .acts button:hover{color:var(--tx)}
+  .faccard .acts button.del:hover{color:var(--down);border-color:rgba(255,111,120,.4)}
+  .facchips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 12px}
+  .facchip{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:11px;background:var(--bg2);border:1px solid var(--line2);font-size:12.5px;color:var(--tx);max-width:100%}
+  .facchip .x{cursor:pointer;color:var(--mut);font-weight:800;font-size:15px;line-height:1}
+  .facchip .x:hover{color:var(--down)}
+  .facchip .mini{width:26px;height:26px;border-radius:7px;object-fit:cover;flex:0 0 auto;background:var(--surf2)}
+  .facchip .doc{font-size:16px;flex:0 0 auto}
+  .facthumb{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:var(--bg2);border:1px solid var(--line);margin-bottom:12px;display:block}
+  .clip{font-size:11px;color:var(--accent);font-weight:700}
   .hcol{min-width:0}
 
   /* ============ MODE BUREAU (Mac) ============ */
@@ -450,6 +473,24 @@
       <button class="btn primary" id="addAlertBtn" style="margin-top:4px">+ Nouvelle alerte</button>
     </section>
 
+    <!-- ============ FACTURES ============ -->
+    <section class="view" id="view-fact">
+      <h2 class="sec">Factures & reçus <span class="hint">stockés sur cet appareil</span></h2>
+      <div class="card" style="border-color:rgba(230,180,69,.28)">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:17px;line-height:1.3">⚠️</span>
+          <div class="muted" style="font-size:12.5px;line-height:1.55">Vos factures restent <b style="color:var(--tx)">uniquement dans ce navigateur, sur ce Mac</b> — jamais envoyées sur internet. Elles seront perdues si vous videz les données du site ou changez d'appareil. <b style="color:var(--tx)">Gardez vos originaux</b> (papier ou nuage) et utilisez « Télécharger tout » pour une copie de secours.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn sm" id="addFactBtn">+ Ajouter une facture</button>
+        <button class="btn sm" id="dlFactBtn">⬇︎ Télécharger tout</button>
+        <span class="muted" id="factStorage" style="font-size:12px;align-self:center"></span>
+      </div>
+      <div id="factEmpty"></div>
+      <div class="facgrid" id="factGrid"></div>
+    </section>
+
     <!-- ============ RÉGLAGES ============ -->
     <section class="view" id="view-set">
       <h2 class="sec">Données & sauvegarde</h2>
@@ -466,12 +507,12 @@
       </div>
       <h2 class="sec">Raccourcis clavier</h2>
       <div class="card"><div class="muted" style="font-size:13px;line-height:2">
-        <b style="color:var(--tx)">1–6</b> changer d'onglet · <b style="color:var(--tx)">N</b> nouvelle position · <b style="color:var(--tx)">R</b> rafraîchir<br>
+        <b style="color:var(--tx)">1–7</b> changer d'onglet · <b style="color:var(--tx)">N</b> nouvelle position · <b style="color:var(--tx)">R</b> rafraîchir<br>
         <b style="color:var(--tx)">Échap</b> fermer une fenêtre · <b style="color:var(--tx)">Entrée</b> valider
       </div></div>
 
       <h2 class="sec">Zone de danger</h2>
-      <div class="card"><div class="set-row"><div class="mid"><div class="t">Tout effacer</div><div class="d">Supprime positions, alertes et historique. Irréversible.</div></div><button class="btn sm danger" id="wipeBtn">Effacer</button></div></div>
+      <div class="card"><div class="set-row"><div class="mid"><div class="t">Tout effacer</div><div class="d">Supprime positions, alertes, historique et factures. Irréversible.</div></div><button class="btn sm danger" id="wipeBtn">Effacer</button></div></div>
       <p class="center muted" style="font-size:12px;margin:20px 0 4px" id="aboutLine"></p>
     </section>
   </main>
@@ -479,6 +520,7 @@
   <nav class="tabs">
     <button data-tab="home" class="active"><span class="ic">◈</span>Aperçu</button>
     <button data-tab="pos"><span class="ic">▤</span>Positions</button>
+    <button data-tab="fact"><span class="ic">🧾</span>Factures</button>
     <button data-tab="hist"><span class="ic">📈</span>Historique</button>
     <button data-tab="panama"><span class="ic">🇵🇦</span>Panama</button>
     <button data-tab="alerts"><span class="ic">🔔</span>Alertes</button>
@@ -501,6 +543,9 @@
   </div>
   <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
   <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
+  <div class="field"><label>Factures <span class="hint">(photo ou PDF, optionnel)</span></label>
+    <div class="facchips" id="posFacChips"></div>
+    <button class="btn sm" type="button" id="posFacAdd" style="width:100%">📎 Joindre une facture</button></div>
   <div class="calc" id="posCalc"></div>
   <button class="btn primary" id="savePos">Enregistrer</button>
   <button class="btn ghost danger" id="delPos" style="margin-top:8px;display:none">Supprimer cette position</button>
@@ -525,7 +570,28 @@
   <button class="btn ghost" id="cfCancel" style="margin-top:8px">Annuler</button>
 </div>
 
+<div class="sheet" id="factSheet">
+  <div class="grab"></div>
+  <h3 id="factSheetTitle">Facture</h3>
+  <div id="factPreview"></div>
+  <div class="two">
+    <div class="field"><label>Date de la facture</label><input id="facDate" type="date"></div>
+    <div class="field"><label>Montant <span class="hint">(optionnel)</span></label>
+      <div style="display:flex;gap:8px"><input id="facAmt" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="facCur" style="width:78px"></select></div></div>
+  </div>
+  <div class="two">
+    <div class="field"><label>Métal <span class="hint">(optionnel)</span></label><select id="facMetal"></select></div>
+    <div class="field"><label>Position liée <span class="hint">(optionnel)</span></label><select id="facPos"></select></div>
+  </div>
+  <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="facNote" type="text" placeholder="ex. Costco, vendeur, no de série…"></div>
+  <button class="btn primary" id="saveFact">Enregistrer</button>
+  <button class="btn ghost" id="openFact" style="margin-top:8px">Ouvrir le fichier</button>
+  <button class="btn ghost danger" id="delFact" style="margin-top:8px;display:none">Supprimer cette facture</button>
+</div>
+
 <input type="file" id="fileIn" class="file-in" accept="application/json,.json">
+<input type="file" id="facFileIn" class="file-in" accept="image/*,application/pdf" multiple>
+<input type="file" id="posFacFileIn" class="file-in" accept="image/*,application/pdf" multiple>
 <div id="toasts"></div>
 
 <script>
@@ -971,14 +1037,14 @@ function renderPositions(){
     if(isSell(p)){
       const avg=metalTotals(m).avg, sp=+p.price||0, proceeds=sp*q, realized=(sp-avg)*q, up=realized>=0;
       el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
-        <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(255,111,120,.15);color:var(--down)">VENTE</span></div>
+        <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(255,111,120,.15);color:var(--down)">VENTE</span>${invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':''}</div>
           <div class="meta">${p.date||'—'} · vendu ${fmtMoney(sp)}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
         <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
           <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
     } else {
       const buy=+p.price||0, prem=+p.premium||0, cost=(buy+prem)*q, val=q*price, pl=val-cost, pct=cost>0?pl/cost*100:0, up=pl>=0;
       el.innerHTML=`<div class="badge ${m}">${METALS[m].ab}</div>
-        <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}</div>
+        <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}${invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':''}</div>
           <div class="meta">${p.date||'—'} · achat ${fmtMoney(buy)}${prem>0?' +'+fmtMoney(prem)+' prime':''}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
         <div class="rt"><div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
           <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div></div>`;
@@ -988,6 +1054,147 @@ function renderPositions(){
   }
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============================================================
+   FACTURES — stockage local des fichiers (IndexedDB)
+   Chaque facture : {id, blob, mime, fname, size, addedAt,
+                     invDate, amount, cur, note, metal, positionId}
+   Les fichiers ne quittent jamais l'appareil.
+   ============================================================ */
+const IDB = {
+  _p:null,
+  open(){ if(IDB._p) return IDB._p; IDB._p=new Promise((res,rej)=>{
+    let rq; try{ rq=indexedDB.open('mv_files',1); }catch(e){ return rej(e); }
+    rq.onupgradeneeded=()=>{ const d=rq.result; if(!d.objectStoreNames.contains('invoices')) d.createObjectStore('invoices',{keyPath:'id'}); };
+    rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); return IDB._p; },
+  _store(mode){ return IDB.open().then(d=>d.transaction('invoices',mode).objectStore('invoices')); },
+  put(rec){ return IDB._store('readwrite').then(st=>new Promise((res,rej)=>{ const r=st.put(rec); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); })); },
+  all(){ return IDB._store('readonly').then(st=>new Promise((res,rej)=>{ const r=st.getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); })); },
+  del(id){ return IDB._store('readwrite').then(st=>new Promise((res,rej)=>{ const r=st.delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); })); },
+  clear(){ return IDB._store('readwrite').then(st=>new Promise((res,rej)=>{ const r=st.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); })); },
+};
+
+let invoiceCache=[], _facUrls=[], _posFacUrls=[], _facPrevUrl=null;
+function invCountFor(posId){ if(!posId) return 0; let n=0; for(const iv of invoiceCache) if(iv.positionId===posId) n++; return n; }
+function isImg(rec){ return (rec.mime||'').startsWith('image/'); }
+function extOf(rec){ const n=rec.fname||''; const dot=n.lastIndexOf('.'); if(dot>0) return n.slice(dot+1).toUpperCase(); if((rec.mime||'').includes('pdf')) return 'PDF'; return 'FICHIER'; }
+function fmtAmt(a,cur){ if(!(a>0)) return ''; try{ return a.toLocaleString('fr-CA',{maximumFractionDigits:2})+' '+cur; }catch(e){ return a+' '+cur; } }
+function posShort(p){ if(!p) return ''; return `${METALS[p.metal]?METALS[p.metal].name:p.metal} · ${fmtOz(+p.qty||0)} oz${isSell(p)?' (vente)':''}`; }
+
+async function loadInvoices(){
+  try{ invoiceCache=await IDB.all(); }catch(e){ invoiceCache=[]; }
+  invoiceCache.sort((a,b)=>String(b.invDate||'').localeCompare(String(a.invDate||''))|| (b.addedAt||0)-(a.addedAt||0));
+  renderInvoices(); renderPositions(); updateFactStorage();
+}
+function updateFactStorage(){
+  const el=$('#factStorage'); if(!el) return;
+  const n=invoiceCache.length;
+  el.textContent = n? `${n} facture${n>1?'s':''}` : '';
+  if(navigator.storage&&navigator.storage.estimate){ navigator.storage.estimate().then(e=>{ if(e&&e.usage!=null){ const mb=e.usage/1048576; if(n) el.textContent=`${n} facture${n>1?'s':''} · ${mb<1?Math.round(e.usage/1024)+' Ko':mb.toFixed(1)+' Mo'}`; } }).catch(()=>{}); }
+}
+function renderInvoices(){
+  const grid=$('#factGrid'), empty=$('#factEmpty'); if(!grid) return;
+  _facUrls.forEach(u=>URL.revokeObjectURL(u)); _facUrls=[];
+  if(!invoiceCache.length){ grid.innerHTML=''; if(empty) empty.innerHTML=emptyBlock('🧾','Aucune facture','Cliquez « Ajouter une facture » pour numériser vos reçus papier.'); return; }
+  if(empty) empty.innerHTML='';
+  grid.innerHTML=invoiceCache.map(rec=>{
+    let thumb;
+    if(isImg(rec)){ const u=URL.createObjectURL(rec.blob); _facUrls.push(u); thumb=`<img src="${u}" alt="">`; }
+    else thumb=`<span class="doc">📄</span>`;
+    const p=rec.positionId?state.investments.find(x=>x.id===rec.positionId):null;
+    const line2=[fmtAmt(rec.amount,rec.cur), rec.metal&&METALS[rec.metal]?METALS[rec.metal].name:'', rec.invDate?fmtDate(rec.invDate,true):''].filter(Boolean).join(' · ');
+    return `<div class="faccard" data-id="${rec.id}">
+      <div class="thumb" data-open="${rec.id}">${thumb}<span class="ext">${extOf(rec)}</span></div>
+      <div class="body">
+        <div class="fn">${escapeHtml(rec.fname||'facture')}</div>
+        ${line2?`<div class="mt">${escapeHtml(line2)}</div>`:''}
+        ${rec.note?`<div class="mt">${escapeHtml(rec.note)}</div>`:''}
+        ${p?`<div class="lk">🔗 ${escapeHtml(posShort(p))}</div>`:''}
+      </div>
+      <div class="acts"><button data-edit="${rec.id}">Détails</button><button class="del" data-del="${rec.id}">Suppr.</button></div>
+    </div>`;
+  }).join('');
+  $$('[data-open]',grid).forEach(el=>el.addEventListener('click',()=>openInvoiceFile(el.dataset.open)));
+  $$('[data-edit]',grid).forEach(el=>el.addEventListener('click',()=>openFactSheet(el.dataset.edit)));
+  $$('[data-del]',grid).forEach(el=>el.addEventListener('click',()=>deleteInvoice(el.dataset.del)));
+}
+function openInvoiceFile(id){ const rec=invoiceCache.find(x=>x.id===id); if(!rec) return; const u=URL.createObjectURL(rec.blob); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000); }
+function deleteInvoice(id){ const rec=invoiceCache.find(x=>x.id===id); confirmDialog('Supprimer cette facture ?', (rec&&rec.fname?escapeHtml(rec.fname)+' — ':'')+'Le fichier sera définitivement effacé de cet appareil.',()=>{ IDB.del(id).then(loadInvoices).then(()=>toast('Facture supprimée','ok')); }); }
+
+/* ---- fiche facture (édition métadonnées / ajout) ---- */
+let facEdit=null; // {id} pour édition, {file} pour nouveau
+function fillMetalSelect(sel){ sel.innerHTML='<option value="">— aucun —</option>'+METAL_ORDER.map(m=>`<option value="${m}">${METALS[m].name}</option>`).join(''); }
+function fillPosSelect(sel){ const list=[...state.investments].sort((a,b)=>(b.date||'').localeCompare(a.date||'')); sel.innerHTML='<option value="">— aucune —</option>'+list.map(p=>`<option value="${p.id}">${escapeHtml(posShort(p))} · ${p.date||''}</option>`).join(''); }
+function openFactSheet(idOrNull){
+  fillCurSelect($('#facCur')); fillMetalSelect($('#facMetal')); fillPosSelect($('#facPos'));
+  const prev=$('#factPreview'), del=$('#delFact');
+  let rec=null;
+  if(idOrNull){ rec=invoiceCache.find(x=>x.id===idOrNull); if(!rec) return; facEdit={id:rec.id}; }
+  const src = rec || facEdit.meta || {};
+  $('#factSheetTitle').textContent = rec?'Détails de la facture':'Nouvelle facture';
+  $('#facDate').value=src.invDate||new Date().toISOString().slice(0,10);
+  $('#facAmt').value=src.amount||''; $('#facCur').value=CURRENCIES.includes(src.cur)?src.cur:(CURRENCIES.includes(state.currency)?state.currency:'USD');
+  $('#facMetal').value=METALS[src.metal]?src.metal:''; $('#facPos').value=(src.positionId&&state.investments.some(p=>p.id===src.positionId))?src.positionId:'';
+  $('#facNote').value=src.note||'';
+  // aperçu
+  let blob = rec?rec.blob:(facEdit.file||null), mime = rec?rec.mime:(facEdit.file?facEdit.file.type:''), fname = rec?rec.fname:(facEdit.file?facEdit.file.name:'');
+  if(_facPrevUrl){ URL.revokeObjectURL(_facPrevUrl); _facPrevUrl=null; }
+  if(prev){ if(blob&&(mime||'').startsWith('image/')){ _facPrevUrl=URL.createObjectURL(blob); prev.innerHTML=`<img class="facthumb" src="${_facPrevUrl}" alt="">`; }
+    else prev.innerHTML=`<div class="calc" style="margin-bottom:12px">📄 <b>${escapeHtml(fname||'fichier')}</b></div>`; }
+  del.style.display = rec?'block':'none';
+  openSheet($('#factSheet'));
+}
+$('#saveFact').addEventListener('click',()=>{
+  if(!facEdit){ closeSheet(); return; }
+  const meta={ invDate:$('#facDate').value||'', amount:+$('#facAmt').value||0, cur:$('#facCur').value||state.currency,
+    metal:$('#facMetal').value||'', positionId:$('#facPos').value||'', note:$('#facNote').value.trim() };
+  if(facEdit.id){ const rec=invoiceCache.find(x=>x.id===facEdit.id); if(!rec){ closeSheet(); return; }
+    Object.assign(rec,meta); IDB.put(rec).then(()=>{ closeSheet(); loadInvoices(); toast('Facture mise à jour','ok'); }); }
+  else if(facEdit.file){ const f=facEdit.file;
+    const rec={ id:uid(), blob:f, mime:f.type||'application/octet-stream', fname:f.name||'facture', size:f.size||0, addedAt:Date.now(), ...meta };
+    IDB.put(rec).then(()=>{ closeSheet(); loadInvoices(); toast('Facture ajoutée','ok'); }).catch(()=>toast('Échec de l’enregistrement','err')); }
+});
+$('#delFact').addEventListener('click',()=>{ if(facEdit&&facEdit.id){ const id=facEdit.id; closeSheet(); deleteInvoice(id); } });
+$('#openFact').addEventListener('click',()=>{ if(facEdit&&facEdit.id) openInvoiceFile(facEdit.id); else toast('Enregistrez d’abord la facture','info'); });
+
+/* ---- ajout depuis la galerie ---- */
+$('#addFactBtn').addEventListener('click',()=>$('#facFileIn').click());
+$('#facFileIn').addEventListener('change',e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  const tooBig=files.find(f=>f.size>25*1048576); if(tooBig){ toast('Fichier trop volumineux (max 25 Mo)','err'); return; }
+  if(files.length===1){ facEdit={file:files[0]}; openFactSheet(null); }
+  else { const today=new Date().toISOString().slice(0,10);
+    Promise.all(files.map(f=>IDB.put({ id:uid(), blob:f, mime:f.type||'application/octet-stream', fname:f.name||'facture', size:f.size||0, addedAt:Date.now(), invDate:today, amount:0, cur:state.currency, metal:'', positionId:'', note:'' })))
+      .then(()=>{ loadInvoices(); toast(files.length+' factures ajoutées','ok'); }).catch(()=>toast('Échec de l’enregistrement','err')); }
+});
+$('#dlFactBtn').addEventListener('click',()=>{ if(!invoiceCache.length){ toast('Aucune facture à télécharger','info'); return; }
+  invoiceCache.forEach((rec,i)=>{ setTimeout(()=>{ const u=URL.createObjectURL(rec.blob); const a=document.createElement('a'); a.href=u; a.download=rec.fname||('facture-'+(i+1)); document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }, i*350); });
+  toast('Téléchargement de '+invoiceCache.length+' fichier(s)…','ok'); });
+
+/* ---- pièces jointes dans la fiche position ---- */
+let posStagedFiles=[];
+function renderPosFacChips(){
+  const box=$('#posFacChips'); if(!box) return;
+  _posFacUrls.forEach(u=>URL.revokeObjectURL(u)); _posFacUrls=[];
+  const linked = editId? invoiceCache.filter(iv=>iv.positionId===editId) : [];
+  let html='';
+  for(const iv of linked){ let mini; if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posFacUrls.push(u); mini=`<img class="mini" src="${u}" alt="">`; } else mini='<span class="doc">📄</span>';
+    html+=`<span class="facchip">${mini}<span>${escapeHtml(iv.fname||'facture')}</span><span class="x" data-detach="${iv.id}" title="Détacher (reste dans Factures)">×</span></span>`; }
+  posStagedFiles.forEach((f,i)=>{ let mini; if((f.type||'').startsWith('image/')){ const u=URL.createObjectURL(f); _posFacUrls.push(u); mini=`<img class="mini" src="${u}" alt="">`; } else mini='<span class="doc">📄</span>';
+    html+=`<span class="facchip">${mini}<span>${escapeHtml(f.name||'fichier')} <span class="clip">(à enregistrer)</span></span><span class="x" data-stg="${i}" title="Retirer">×</span></span>`; });
+  box.innerHTML=html;
+  $$('[data-detach]',box).forEach(el=>el.addEventListener('click',()=>{ const rec=invoiceCache.find(x=>x.id===el.dataset.detach); if(!rec) return; rec.positionId=''; IDB.put(rec).then(()=>loadInvoices()).then(renderPosFacChips); }));
+  $$('[data-stg]',box).forEach(el=>el.addEventListener('click',()=>{ posStagedFiles.splice(+el.dataset.stg,1); renderPosFacChips(); }));
+}
+$('#posFacAdd').addEventListener('click',()=>$('#posFacFileIn').click());
+$('#posFacFileIn').addEventListener('change',e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  const tooBig=files.find(f=>f.size>25*1048576); if(tooBig){ toast('Fichier trop volumineux (max 25 Mo)','err'); return; }
+  posStagedFiles.push(...files); renderPosFacChips(); });
+function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise.resolve();
+  const files=posStagedFiles; posStagedFiles=[];
+  const today=new Date().toISOString().slice(0,10);
+  return Promise.all(files.map(f=>IDB.put({ id:uid(), blob:f, mime:f.type||'application/octet-stream', fname:f.name||'facture', size:f.size||0, addedAt:Date.now(),
+    invDate:($('#fDate').value||today), amount:(e?e.rawPrice:0)||0, cur:(e?e.cur:state.currency), metal:selMetal, positionId:posId, note:'' })));
+}
 
 /* ============================================================
    HISTORIQUE — graphique interactif
@@ -1164,7 +1371,7 @@ function updatePosCalc(){
   $('#posCalc').innerHTML=html;
 }
 function openPosSheet(id){
-  editId=id||null; const del=$('#delPos'); fillCurSelect($('#fCur'));
+  editId=id||null; posStagedFiles=[]; const del=$('#delPos'); fillCurSelect($('#fCur'));
   if(id){ const p=state.investments.find(x=>x.id===id); if(!p) return;
     $('#posSheetTitle').textContent='Modifier la position';
     setSegType(isSell(p)?'sell':'buy'); setSegMetal($('#metalSeg'),p.metal);
@@ -1183,7 +1390,7 @@ function openPosSheet(id){
     $('#fUnit').value='oz'; $('#fCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
     $('#fQty').value=''; $('#fPrice').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
   }
-  updatePosUI(); openSheet($('#posSheet'));
+  updatePosUI(); renderPosFacChips(); openSheet($('#posSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
 }
 $('#savePos').addEventListener('click',()=>{
@@ -1194,9 +1401,12 @@ $('#savePos').addEventListener('click',()=>{
   const rec={ type:e.type, metal:selMetal, qty:e.qtyOz, price:e.priceUsdOz, premium:e.premUsdOz,
     date:$('#fDate').value||new Date().toISOString().slice(0,10), note:$('#fNote').value.trim(),
     entry:{unit:e.unit,cur:e.cur,mode:e.mode,q:e.rawQty,p:e.rawPrice,pr:e.rawPrem} };
-  if(editId){ Object.assign(state.investments.find(x=>x.id===editId),rec); toast('Position modifiée','ok'); }
-  else{ rec.id=uid(); rec.createdAt=Date.now(); state.investments.push(rec); toast(e.type==='sell'?'Vente enregistrée':'Position ajoutée','ok'); }
-  save(K.inv,state.investments); recordSnapshot(); closeSheet(); renderAll();
+  let posId;
+  if(editId){ posId=editId; Object.assign(state.investments.find(x=>x.id===editId),rec); toast('Position modifiée','ok'); }
+  else{ rec.id=uid(); rec.createdAt=Date.now(); state.investments.push(rec); posId=rec.id; toast(e.type==='sell'?'Vente enregistrée':'Position ajoutée','ok'); }
+  save(K.inv,state.investments); recordSnapshot();
+  flushStagedInvoices(posId,e).then(()=>loadInvoices()).catch(()=>{});
+  closeSheet(); renderAll();
 });
 $('#delPos').addEventListener('click',()=>{ const id=editId;
   confirmDialog('Supprimer la position ?','Cette position sera définitivement retirée.',()=>{
@@ -1243,6 +1453,7 @@ function switchTab(name){
   $$('nav.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   scrollEl.scrollTop=0;
   if(name==='hist') requestAnimationFrame(renderHistory);
+  if(name==='fact') loadInvoices();
 }
 $$('nav.tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 $$('#seriesSeg button').forEach(b=>b.addEventListener('click',()=>{ histSeries=b.dataset.s; renderHistory(); }));
@@ -1251,13 +1462,13 @@ $$('#seriesSeg button').forEach(b=>b.addEventListener('click',()=>{ histSeries=b
 document.addEventListener('keydown',(e)=>{
   if(e.key==='Escape'){ if(openSheetEl){ e.preventDefault(); closeSheet(); } return; }
   if(openSheetEl){
-    if(e.key==='Enter'&&!e.shiftKey){ const map={posSheet:'#savePos',alertSheet:'#saveAlert',confirmSheet:'#cfOk'}, sel=map[openSheetEl.id];
+    if(e.key==='Enter'&&!e.shiftKey){ const map={posSheet:'#savePos',alertSheet:'#saveAlert',confirmSheet:'#cfOk',factSheet:'#saveFact'}, sel=map[openSheetEl.id];
       if(sel){ e.preventDefault(); $(sel).click(); } }
     return;
   }
   const tag=(e.target.tagName||'').toLowerCase();
   if(tag==='input'||tag==='select'||tag==='textarea'||e.metaKey||e.ctrlKey||e.altKey) return;
-  const tabs=['home','pos','hist','panama','alerts','set'], n=parseInt(e.key,10);
+  const tabs=['home','pos','fact','hist','panama','alerts','set'], n=parseInt(e.key,10);
   if(n>=1&&n<=tabs.length){ e.preventDefault(); switchTab(tabs[n-1]); }
   else if(e.key==='n'||e.key==='N'){ e.preventDefault(); openPosSheet(null); }
   else if(e.key==='r'||e.key==='R'){ e.preventDefault(); refresh(false); }
@@ -1301,8 +1512,9 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
       renderAll(); toast('Sauvegarde importée','ok'); });
   }catch(err){ toast('Fichier JSON invalide','err'); } finally{ e.target.value=''; } };
   r.readAsText(f); });
-$('#wipeBtn').addEventListener('click',()=>{ confirmDialog('Tout effacer ?','Positions, alertes et historique seront supprimés. Irréversible.',()=>{
-  state.investments=[]; state.alerts=[]; state.snapshots=[]; save(K.inv,[]); save(K.al,[]); save(K.snap,[]); renderAll(); toast('Données effacées','ok'); }); });
+$('#wipeBtn').addEventListener('click',()=>{ confirmDialog('Tout effacer ?','Positions, alertes, historique et factures seront supprimés. Irréversible.',()=>{
+  state.investments=[]; state.alerts=[]; state.snapshots=[]; save(K.inv,[]); save(K.al,[]); save(K.snap,[]);
+  IDB.clear().then(loadInvoices).catch(()=>{}); renderAll(); toast('Données effacées','ok'); }); });
 
 function toast(msg,kind='info',ms=2600){ const t=document.createElement('div'); t.className='toast '+kind; t.textContent=msg; $('#toasts').appendChild(t);
   setTimeout(()=>{ t.style.transition='opacity .3s,transform .3s'; t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); },ms); }
@@ -1328,6 +1540,7 @@ setInterval(()=>{ const c=$('#statusChip'); if(!refreshing&&c&&!c.classList.cont
 /* ---- boot ---- */
 $('#curLabel').textContent=state.currency;
 renderAll();
+loadInvoices();
 setStatus(navigator.onLine?'ok':'off');
 if(Object.keys(state.prices).length) $('#statusText').textContent='Cache';
 refresh(true);
