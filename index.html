@@ -174,17 +174,20 @@
   .poslist{display:flex;flex-direction:column;gap:10px}
   .pos{display:flex;align-items:center;gap:13px;padding:14px 15px;background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line);border-radius:15px;cursor:pointer;transition:transform .1s,border-color .15s}
   .pos:hover{border-color:var(--line2);transform:translateY(-1px)}
-  .pos .mid{flex:1;min-width:0}
+  .pos .mid{flex:0 1 auto;min-width:0}
   .pos .nm{font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .pos .meta{font-size:12px;color:var(--mut);margin-top:2px}
-  .pos .rt{text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .pos .rt{text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto;margin-left:auto}
   .pos .val{font-weight:700}
   .pos .pl{font-size:12px;font-weight:600}
-  .pthumb{width:44px;height:44px;border-radius:11px;flex:0 0 auto;overflow:hidden;background:var(--bg2);border:1px solid var(--line2);position:relative;cursor:zoom-in}
-  .pthumb img{width:100%;height:100%;object-fit:cover;display:block}
-  .pthumb .dot{position:absolute;bottom:-3px;right:-3px;width:15px;height:15px;border-radius:50%;border:2px solid var(--bg);box-shadow:0 0 0 1px rgba(0,0,0,.3)}
-  #imgPreview{position:fixed;z-index:60;pointer-events:none;opacity:0;transform:scale(.97);transition:opacity .12s,transform .12s;padding:6px;background:var(--surf3);border:1px solid var(--line2);border-radius:14px;box-shadow:0 20px 55px rgba(0,0,0,.6)}
-  #imgPreview img{max-width:340px;max-height:340px;border-radius:9px;display:block}
+  .pthumbs{display:flex;gap:7px;flex:0 0 auto;align-items:center}
+  .pth{width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--bg2);border:1px solid var(--line2);flex:0 0 auto;display:grid;place-items:center;color:var(--mut);font-size:19px;position:relative;cursor:zoom-in;transition:transform .1s,border-color .12s}
+  .pth:hover{border-color:var(--accent);transform:scale(1.06)}
+  .pth img{width:100%;height:100%;object-fit:cover;display:block}
+  .pth.doc{cursor:pointer}
+  .pth .fac{position:absolute;bottom:-1px;right:-1px;font-size:8px;font-weight:800;letter-spacing:.3px;background:var(--accent);color:#0b1020;padding:1px 4px;border-radius:5px}
+  #imgPreview{position:fixed;z-index:60;pointer-events:none;opacity:0;transform:scale(.97);transition:opacity .12s,transform .12s;padding:6px;background:var(--surf3);border:1px solid var(--line2);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.65)}
+  #imgPreview img{max-width:min(72vw,540px);max-height:min(72vh,540px);border-radius:9px;display:block}
   #imgPreview.on{opacity:1;transform:scale(1)}
   .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surf2);color:var(--mut);letter-spacing:.3px}
 
@@ -1104,16 +1107,21 @@ function renderPositions(){
 function posRowEl(p){
   const m=p.metal, price=spotUsd(m), q=+p.qty||0;
   const el=document.createElement('div'); el.className='pos'+(p.sold?' sold':''); el.dataset.id=p.id;
-  const clip=(invCountFor(p.id)?' <span class="clip">📎'+invCountFor(p.id)+'</span>':'')+((p.details&&p.details.length)?' <span class="clip">ℹ️'+p.details.length+'</span>':'');
-  const thumb=thumbForPos(p.id); let thumbUrl=null, media;
-  if(thumb){ thumbUrl=URL.createObjectURL(thumb.blob); _posThumbUrls.push(thumbUrl);
-    media=`<div class="pthumb"><img src="${thumbUrl}" alt=""><span class="dot" style="background:${METALS[m].c}"></span></div>`; }
-  else media=`<div class="badge ${m}${p.sold?' dim':''}">${METALS[m].ab}</div>`;
+  const clip=(p.details&&p.details.length)?' <span class="clip">ℹ️'+p.details.length+'</span>':'';
+  const media=`<div class="badge ${m}${p.sold?' dim':''}">${METALS[m].ab}</div>`;
+  // rangée de vignettes (photos puis facture en dernier, 4 max)
+  let thumbs='';
+  for(const iv of imagesForPos(p.id)){ const isInv=iv.kind!=='photo';
+    if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posThumbUrls.push(u);
+      thumbs+=`<div class="pth" data-att="${iv.id}"><img src="${u}" alt="">${isInv?'<span class="fac">FAC</span>':''}</div>`; }
+    else thumbs+=`<div class="pth doc" data-att="${iv.id}">📄${isInv?'<span class="fac">FAC</span>':''}</div>`; }
+  const thumbsHtml=thumbs?`<div class="pthumbs">${thumbs}</div>`:'';
   if(p.sold){
     const cost=lotCost(p), proceeds=+p.soldTotal||0, realized=proceeds-cost, up=realized>=0;
     el.innerHTML=`${media}
       <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(110,168,255,.16);color:var(--accent)">VENDU</span>${clip}</div>
         <div class="meta">${p.soldDate||'—'} · coût ${fmtMoney(cost)}${p.note?' · '+escapeHtml(p.note):''}</div></div>
+      ${thumbsHtml}
       <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
         <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
   } else if(isSell(p)){
@@ -1121,6 +1129,7 @@ function posRowEl(p){
     el.innerHTML=`${media}
       <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} <span class="tag" style="background:rgba(255,111,120,.15);color:var(--down)">VENTE</span>${clip}</div>
         <div class="meta">${p.date||'—'} · vendu ${fmtMoney(sp)}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
+      ${thumbsHtml}
       <div class="rt"><div class="val tnum">${fmtMoney(proceeds)}</div>
         <div class="pl ${up?'chg up':'chg down'}">Réalisé ${fmtMoney(realized)}</div></div>`;
   } else {
@@ -1128,10 +1137,13 @@ function posRowEl(p){
     el.innerHTML=`${media}
       <div class="mid"><div class="nm">${fmtOz(q)} oz ${METALS[m].name} ${prem>0?'<span class="tag">prime</span>':''}${clip}</div>
         <div class="meta">${p.date||'—'} · achat ${fmtMoney(buy)}${prem>0?' +'+fmtMoney(prem)+' prime':''}/oz${p.note?' · '+escapeHtml(p.note):''}</div></div>
+      ${thumbsHtml}
       <div class="rt"><div class="val tnum">${price>0?fmtMoney(val):'—'}</div>
         <div class="pl ${up?'chg up':'chg down'}">${price>0?fmtMoney(pl)+' · '+fmtPct(pct):''}</div></div>`;
   }
-  if(thumbUrl){ const pt=el.querySelector('.pthumb'); if(pt) bindThumbPreview(pt,thumbUrl); }
+  $$('.pth',el).forEach(pt=>{ const img=pt.querySelector('img');
+    if(img) bindThumbPreview(pt,img.getAttribute('src'));
+    pt.addEventListener('click',(ev)=>{ ev.stopPropagation(); openInvoiceFile(pt.dataset.att); }); });
   el.addEventListener('click',()=>openPosSheet(p.id));
   return el;
 }
@@ -1169,7 +1181,15 @@ function bindThumbPreview(el,url){
 function invCountFor(posId){ if(!posId) return 0; let n=0; for(const iv of invoiceCache) if(iv.positionId===posId&&iv.kind!=='photo') n++; return n; }
 function isImg(rec){ return (rec.mime||'').startsWith('image/'); }
 function photoForPos(posId){ if(!posId) return null; return invoiceCache.find(iv=>iv.positionId===posId&&iv.kind==='photo'&&isImg(iv))||null; }
-function thumbForPos(posId){ if(!posId) return null; return photoForPos(posId)||invoiceCache.find(iv=>iv.positionId===posId&&isImg(iv))||null; }
+// Vignettes d'une position : photos d'abord, facture(s) en dernier, 4 max (la dernière facture est toujours conservée)
+function imagesForPos(posId){
+  if(!posId) return [];
+  const atts=invoiceCache.filter(iv=>iv.positionId===posId);
+  const photos=atts.filter(iv=>iv.kind==='photo');
+  const invs=atts.filter(iv=>iv.kind!=='photo');
+  if(invs.length){ const lastInv=invs[invs.length-1]; const rest=[...photos,...invs.slice(0,-1)]; return [...rest.slice(0,3),lastInv]; }
+  return photos.slice(0,4);
+}
 function extOf(rec){ const n=rec.fname||''; const dot=n.lastIndexOf('.'); if(dot>0) return n.slice(dot+1).toUpperCase(); if((rec.mime||'').includes('pdf')) return 'PDF'; return 'FICHIER'; }
 function fmtAmt(a,cur){ if(!(a>0)) return ''; try{ return a.toLocaleString('fr-CA',{maximumFractionDigits:2})+' '+cur; }catch(e){ return a+' '+cur; } }
 function posShort(p){ if(!p) return ''; return `${METALS[p.metal]?METALS[p.metal].name:p.metal} · ${fmtOz(+p.qty||0)} oz${isSell(p)?' (vente)':''}`; }
