@@ -576,11 +576,13 @@
   <div class="field"><label>Type</label><div class="seg" id="typeSeg"><button data-t="buy">Achat</button><button data-t="sell">Vente</button></div></div>
   <div class="field"><label>Métal</label><div class="seg" id="metalSeg"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="XPT">Platine</button><button data-m="XPD">Palladium</button><button data-m="HG">Cuivre</button></div></div>
   <div class="two">
-    <div class="field"><label>Quantité</label>
+    <div class="field"><label>Nombre de pièces <span class="hint">(lingots/pièces)</span></label>
+      <input id="fPieces" type="number" inputmode="numeric" step="1" min="1" placeholder="1"></div>
+    <div class="field"><label id="fQtyLbl">Poids par pièce</label>
       <div style="display:flex;gap:8px"><input id="fQty" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="fUnit" style="width:74px"><option value="oz">oz</option><option value="g">g</option><option value="kg">kg</option></select></div></div>
-    <div class="field"><label id="fPriceLbl">Coût total payé</label>
-      <div style="display:flex;gap:8px"><input id="fPrice" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="fCur" style="width:78px"></select></div></div>
   </div>
+  <div class="field"><label id="fPriceLbl">Coût total payé</label>
+    <div style="display:flex;gap:8px"><input id="fPrice" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="fCur" style="width:78px"></select></div></div>
   <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
   <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
   <div class="field"><label>Photos du produit <span class="hint">(cliquez le +, collez ⌘V, ou glissez-déposez — optionnel)</span></label>
@@ -733,6 +735,7 @@ function fmtCompact(usd){ const v=usd2disp(usd), a=Math.abs(v), s=curSym();
 function fmtNum(n,d=2){ return new Intl.NumberFormat('fr-CA',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n); }
 function fmtPct(p){ return (p>=0?'+':'')+fmtNum(p,2)+' %'; }
 function fmtOz(n){ return fmtNum(n, n>=100?2:n>=1?3:4); }
+function fmtWeightShort(n){ try{ return (+(+n||0).toFixed(4)).toLocaleString('fr-CA',{maximumFractionDigits:4}); }catch(e){ return String(n); } }
 function fmtDate(t,withYear){ try{ return new Date(t).toLocaleDateString('fr-CA',withYear?{day:'numeric',month:'short',year:'2-digit'}:{day:'numeric',month:'short'}); }catch(e){ return ''; } }
 function spotUsd(m){ const p=state.prices[m]; return (typeof p==='number'&&isFinite(p))?p:0; }
 
@@ -1086,7 +1089,6 @@ function donutSvg(segs,total){
 
 let posFilter='all';
 function renderPositions(){
-  _posThumbUrls.forEach(u=>URL.revokeObjectURL(u)); _posThumbUrls=[];
   $('#posCount').textContent = state.investments.length?state.investments.length+' opération(s)':'';
   const card=$('#posCard'), fc=$('#posFilter');
   if(!state.investments.length){ if(fc) fc.innerHTML=''; card.innerHTML='<div class="card">'+emptyBlock('▤','Aucune position','Cliquez « + » pour ajouter votre premier achat.')+'</div>'; return; }
@@ -1107,12 +1109,13 @@ function renderPositions(){
 function posRowEl(p){
   const m=p.metal, price=spotUsd(m), q=+p.qty||0;
   const el=document.createElement('div'); el.className='pos'+(p.sold?' sold':''); el.dataset.id=p.id;
-  const clip=(p.details&&p.details.length)?' <span class="clip">ℹ️'+p.details.length+'</span>':'';
+  const pcs=(p.pieces&&p.pieces>1)?` <span class="tag">${p.pieces} × ${fmtWeightShort(q/p.pieces)} oz</span>`:'';
+  const clip=pcs+((p.details&&p.details.length)?' <span class="clip">ℹ️'+p.details.length+'</span>':'');
   const media=`<div class="badge ${m}${p.sold?' dim':''}">${METALS[m].ab}</div>`;
   // rangée de vignettes (photos puis facture en dernier, 4 max)
   let thumbs='';
   for(const iv of imagesForPos(p.id)){ const isInv=iv.kind!=='photo';
-    if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posThumbUrls.push(u);
+    if(isImg(iv)){ const u=blobUrl(iv);
       thumbs+=`<div class="pth" data-att="${iv.id}"><img src="${u}" alt="">${isInv?'<span class="fac">FAC</span>':''}</div>`; }
     else thumbs+=`<div class="pth doc" data-att="${iv.id}">📄${isInv?'<span class="fac">FAC</span>':''}</div>`; }
   const thumbsHtml=thumbs?`<div class="pthumbs">${thumbs}</div>`:'';
@@ -1168,7 +1171,13 @@ const IDB = {
   clear(){ return IDB._store('readwrite').then(st=>new Promise((res,rej)=>{ const r=st.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); })); },
 };
 
-let invoiceCache=[], _facUrls=[], _posFacUrls=[], _facPrevUrl=null, _posThumbUrls=[];
+let invoiceCache=[];
+// URLs d'objets mémorisées : créées une seule fois par fichier, réutilisées partout,
+// jamais révoquées en cours de session (évite les images cassées par révocation prématurée).
+const _blobUrls=new Map(), _fileUrls=new WeakMap();
+function blobUrl(rec){ let u=_blobUrls.get(rec.id); if(!u){ u=URL.createObjectURL(rec.blob); _blobUrls.set(rec.id,u); } return u; }
+function fileUrl(f){ let u=_fileUrls.get(f); if(!u){ u=URL.createObjectURL(f); _fileUrls.set(f,u); } return u; }
+function pruneBlobUrls(){ const ids=new Set(invoiceCache.map(r=>r.id)); for(const [id,u] of _blobUrls){ if(!ids.has(id)){ URL.revokeObjectURL(u); _blobUrls.delete(id); } } }
 function bindThumbPreview(el,url){
   const pv=$('#imgPreview'), img=pv&&pv.querySelector('img'); if(!pv||!img) return;
   if(!matchMedia('(hover:hover)').matches) return;
@@ -1197,7 +1206,7 @@ function posShort(p){ if(!p) return ''; return `${METALS[p.metal]?METALS[p.metal
 async function loadInvoices(){
   try{ invoiceCache=await IDB.all(); }catch(e){ invoiceCache=[]; }
   invoiceCache.sort((a,b)=>String(b.invDate||'').localeCompare(String(a.invDate||''))|| (b.addedAt||0)-(a.addedAt||0));
-  renderInvoices(); renderPositions(); updateFactStorage();
+  pruneBlobUrls(); renderInvoices(); renderPositions(); updateFactStorage();
 }
 function updateFactStorage(){
   const el=$('#factStorage'); if(!el) return;
@@ -1207,12 +1216,11 @@ function updateFactStorage(){
 }
 function renderInvoices(){
   const grid=$('#factGrid'), empty=$('#factEmpty'); if(!grid) return;
-  _facUrls.forEach(u=>URL.revokeObjectURL(u)); _facUrls=[];
   if(!invoiceCache.length){ grid.innerHTML=''; if(empty) empty.innerHTML=emptyBlock('🧾','Aucune facture','Cliquez « Ajouter une facture » pour numériser vos reçus papier.'); return; }
   if(empty) empty.innerHTML='';
   grid.innerHTML=invoiceCache.map(rec=>{
     let thumb;
-    if(isImg(rec)){ const u=URL.createObjectURL(rec.blob); _facUrls.push(u); thumb=`<img src="${u}" alt="">`; }
+    if(isImg(rec)){ const u=blobUrl(rec); thumb=`<img src="${u}" alt="">`; }
     else thumb=`<span class="doc">📄</span>`;
     const p=rec.positionId?state.investments.find(x=>x.id===rec.positionId):null;
     const line2=[fmtAmt(rec.amount,rec.cur), rec.metal&&METALS[rec.metal]?METALS[rec.metal].name:'', rec.invDate?fmtDate(rec.invDate,true):''].filter(Boolean).join(' · ');
@@ -1231,7 +1239,7 @@ function renderInvoices(){
   $$('[data-edit]',grid).forEach(el=>el.addEventListener('click',()=>openFactSheet(el.dataset.edit)));
   $$('[data-del]',grid).forEach(el=>el.addEventListener('click',()=>deleteInvoice(el.dataset.del)));
 }
-function openInvoiceFile(id){ const rec=invoiceCache.find(x=>x.id===id); if(!rec) return; const u=URL.createObjectURL(rec.blob); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000); }
+function openInvoiceFile(id){ const rec=invoiceCache.find(x=>x.id===id); if(!rec) return; window.open(blobUrl(rec),'_blank'); }
 function deleteInvoice(id){ const rec=invoiceCache.find(x=>x.id===id); confirmDialog('Supprimer cette facture ?', (rec&&rec.fname?escapeHtml(rec.fname)+' — ':'')+'Le fichier sera définitivement effacé de cet appareil.',()=>{ IDB.del(id).then(loadInvoices).then(()=>toast('Facture supprimée','ok')); }); }
 
 /* ---- fiche facture (édition métadonnées / ajout) ---- */
@@ -1250,9 +1258,9 @@ function openFactSheet(idOrNull){
   $('#facMetal').value=METALS[src.metal]?src.metal:''; $('#facPos').value=(src.positionId&&state.investments.some(p=>p.id===src.positionId))?src.positionId:'';
   $('#facNote').value=src.note||'';
   // aperçu
-  let blob = rec?rec.blob:(facEdit.file||null), mime = rec?rec.mime:(facEdit.file?facEdit.file.type:''), fname = rec?rec.fname:(facEdit.file?facEdit.file.name:'');
-  if(_facPrevUrl){ URL.revokeObjectURL(_facPrevUrl); _facPrevUrl=null; }
-  if(prev){ if(blob&&(mime||'').startsWith('image/')){ _facPrevUrl=URL.createObjectURL(blob); prev.innerHTML=`<img class="facthumb" src="${_facPrevUrl}" alt="">`; }
+  const mime = rec?rec.mime:(facEdit.file?facEdit.file.type:''), fname = rec?rec.fname:(facEdit.file?facEdit.file.name:'');
+  const purl = rec?blobUrl(rec):(facEdit.file?fileUrl(facEdit.file):null);
+  if(prev){ if(purl&&(mime||'').startsWith('image/')){ prev.innerHTML=`<img class="facthumb" src="${purl}" alt="">`; }
     else prev.innerHTML=`<div class="calc" style="margin-bottom:12px">📄 <b>${escapeHtml(fname||'fichier')}</b></div>`; }
   del.style.display = rec?'block':'none';
   openSheet($('#factSheet'));
@@ -1287,12 +1295,11 @@ $('#dlFactBtn').addEventListener('click',()=>{ if(!invoiceCache.length){ toast('
 let posStagedFiles=[];
 function renderPosFacChips(){
   const box=$('#posFacChips'); if(!box) return;
-  _posFacUrls.forEach(u=>URL.revokeObjectURL(u)); _posFacUrls=[];
   const linked = editId? invoiceCache.filter(iv=>iv.positionId===editId&&iv.kind!=='photo') : [];
   let html='';
-  for(const iv of linked){ let mini; if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posFacUrls.push(u); mini=`<img class="mini" src="${u}" alt="">`; } else mini='<span class="doc">📄</span>';
+  for(const iv of linked){ let mini; if(isImg(iv)){ mini=`<img class="mini" src="${blobUrl(iv)}" alt="">`; } else mini='<span class="doc">📄</span>';
     html+=`<span class="facchip">${mini}<span>${escapeHtml(iv.fname||'facture')}</span><span class="x" data-detach="${iv.id}" title="Détacher (reste dans Factures)">×</span></span>`; }
-  posStagedFiles.forEach((f,i)=>{ let mini; if((f.type||'').startsWith('image/')){ const u=URL.createObjectURL(f); _posFacUrls.push(u); mini=`<img class="mini" src="${u}" alt="">`; } else mini='<span class="doc">📄</span>';
+  posStagedFiles.forEach((f,i)=>{ let mini; if((f.type||'').startsWith('image/')){ mini=`<img class="mini" src="${fileUrl(f)}" alt="">`; } else mini='<span class="doc">📄</span>';
     html+=`<span class="facchip">${mini}<span>${escapeHtml(f.name||'fichier')} <span class="clip">(à enregistrer)</span></span><span class="x" data-stg="${i}" title="Retirer">×</span></span>`; });
   box.innerHTML=html;
   $$('[data-detach]',box).forEach(el=>el.addEventListener('click',()=>{ const rec=invoiceCache.find(x=>x.id===el.dataset.detach); if(!rec) return; rec.positionId=''; IDB.put(rec).then(()=>loadInvoices()).then(renderPosFacChips); }));
@@ -1310,7 +1317,7 @@ function flushStagedInvoices(posId,e){ if(!posStagedFiles.length) return Promise
 }
 
 /* ---- photos du produit : grille de tuiles (clic / coller ⌘V / glisser-déposer) ---- */
-let posStagedPhotos=[], posRemovedPhotoIds=[], _posPhotoUrls=[];
+let posStagedPhotos=[], posRemovedPhotoIds=[];
 function addPhotoFiles(files){
   const imgs=[...files].filter(f=>(f.type||'').startsWith('image/'));
   if(!imgs.length){ toast('Aucune image détectée','err'); return; }
@@ -1320,13 +1327,12 @@ function addPhotoFiles(files){
 }
 function renderPosMedia(){
   const grid=$('#posMediaGrid'); if(!grid) return;
-  _posPhotoUrls.forEach(u=>URL.revokeObjectURL(u)); _posPhotoUrls=[];
   const existing = editId? invoiceCache.filter(iv=>iv.positionId===editId&&iv.kind==='photo'&&!posRemovedPhotoIds.includes(iv.id)) : [];
   let html='';
-  for(const iv of existing){ let inner='📄'; if(isImg(iv)){ const u=URL.createObjectURL(iv.blob); _posPhotoUrls.push(u); inner=`<img src="${u}" alt="">`; }
+  for(const iv of existing){ let inner='📄'; if(isImg(iv)){ inner=`<img src="${blobUrl(iv)}" alt="">`; }
     html+=`<div class="media-tile">${inner}<span class="x" data-rmph="${iv.id}" title="Retirer">×</span></div>`; }
-  posStagedPhotos.forEach((f,i)=>{ const u=URL.createObjectURL(f); _posPhotoUrls.push(u);
-    html+=`<div class="media-tile"><img src="${u}" alt=""><span class="badge2">NOUV.</span><span class="x" data-rmst="${i}" title="Retirer">×</span></div>`; });
+  posStagedPhotos.forEach((f,i)=>{
+    html+=`<div class="media-tile"><img src="${fileUrl(f)}" alt=""><span class="badge2">NOUV.</span><span class="x" data-rmst="${i}" title="Retirer">×</span></div>`; });
   html+=`<div class="media-add" id="posMediaAdd" tabindex="0" title="Ajouter : clic, ⌘V ou glisser-déposer">+<span class="mini-lbl">photo</span></div>`;
   grid.innerHTML=html;
   $$('[data-rmph]',grid).forEach(el=>el.addEventListener('click',()=>{ posRemovedPhotoIds.push(el.dataset.rmph); renderPosMedia(); }));
@@ -1495,15 +1501,16 @@ function setSegMetal(seg,m){ selMetal=m; $$('button',seg).forEach(b=>b.classList
 function setSegType(t){ selType=t; $$('#typeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); updatePosUI(); }
 $$('#metalSeg button').forEach(b=>b.addEventListener('click',()=>setSegMetal($('#metalSeg'),b.dataset.m)));
 $$('#typeSeg button').forEach(b=>b.addEventListener('click',()=>setSegType(b.dataset.t)));
-['#fQty','#fPrice'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
+['#fQty','#fPrice','#fPieces'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
 ['#fUnit','#fCur'].forEach(s=>$(s).addEventListener('change',updatePosCalc));
 
 function readPosInputs(){
   const unit=$('#fUnit').value, cur=$('#fCur').value, mode='total', type=selType;
+  const pieces=Math.max(1,Math.round(+$('#fPieces').value||1));
   const rawQty=+$('#fQty').value||0, rawPrice=+$('#fPrice').value||0, rawPrem=0;
-  const qtyOz=qtyToOz(rawQty,unit);
+  const perPieceOz=qtyToOz(rawQty,unit), qtyOz=perPieceOz*pieces;
   const totalUsd=curToUsd(rawPrice,cur), priceUsdOz=qtyOz>0?totalUsd/qtyOz:0, premUsdOz=0;
-  return {type,unit,cur,mode,rawQty,rawPrice,rawPrem,qtyOz,priceUsdOz,premUsdOz};
+  return {type,unit,cur,mode,pieces,rawQty,rawPrice,rawPrem,perPieceOz,qtyOz,priceUsdOz,premUsdOz};
 }
 function updatePosUI(){
   const isBuy=selType==='buy';
@@ -1518,6 +1525,8 @@ $('#fSold').addEventListener('change',()=>{ updateSoldFields(); updatePosCalc();
 ['#fSoldTotal'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
 function updatePosCalc(){
   const e=readPosInputs(), spot=spotUsd(selMetal); let html='';
+  const wLine = e.qtyOz>0 ? (e.pieces>1 ? `<b>${e.pieces}</b> × ${fmtOz(e.perPieceOz)} oz = <b>${fmtOz(e.qtyOz)} oz</b> au total<br>` : `Poids total : <b>${fmtOz(e.qtyOz)} oz</b><br>`) : '';
+  html+=wLine;
   if(selType==='sell'){
     const proceeds=e.qtyOz*e.priceUsdOz, t=metalTotals(selMetal), gain=(e.priceUsdOz-t.avg)*e.qtyOz;
     html=`Produit de la vente : <b>${fmtMoney(proceeds)}</b>`;
@@ -1558,6 +1567,7 @@ function openPosSheet(id){
     const totalUsd=((+p.price||0)+(+p.premium||0))*(+p.qty||0);
     const totalCur=usdToCur(totalUsd,cur);
     $('#fUnit').value=unit; $('#fCur').value=cur;
+    $('#fPieces').value = (p.pieces&&p.pieces>1) ? p.pieces : '';
     $('#fQty').value = en&&en.q ? en.q : (ozToQty(+p.qty||0,unit)||'');
     $('#fPrice').value = totalCur ? Math.round(totalCur*100)/100 : '';
     $('#fDate').value=p.date||''; $('#fNote').value=p.note||''; del.style.display='block';
@@ -1569,7 +1579,7 @@ function openPosSheet(id){
     $('#posSheetTitle').textContent='Ajouter une position';
     setSegType('buy'); setSegMetal($('#metalSeg'),'XAU');
     $('#fUnit').value='oz'; $('#fCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
-    $('#fQty').value=''; $('#fPrice').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
+    $('#fPieces').value=''; $('#fQty').value=''; $('#fPrice').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
     $('#fSold').checked=false; $('#fSoldDate').value=''; $('#fSoldTotal').value=''; $('#fSoldCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
     renderPosDetails([]);
   }
@@ -1583,10 +1593,10 @@ $('#savePos').addEventListener('click',()=>{
   if(e.type==='sell'){ const avail=netQtyExcluding(selMetal,editId); if(e.qtyOz>avail+1e-9){ toast('Vente supérieure à la quantité détenue ('+fmtOz(avail)+' oz)','err'); return; } }
   const isSold = e.type==='buy' && $('#fSold').checked;
   const soldCur=$('#fSoldCur').value, soldAmt=+$('#fSoldTotal').value||0;
-  const rec={ type:e.type, metal:selMetal, qty:e.qtyOz, price:e.priceUsdOz, premium:e.premUsdOz,
+  const rec={ type:e.type, metal:selMetal, qty:e.qtyOz, price:e.priceUsdOz, premium:e.premUsdOz, pieces:e.pieces,
     date:$('#fDate').value||new Date().toISOString().slice(0,10), note:$('#fNote').value.trim(),
     details:readPosDetails(),
-    entry:{unit:e.unit,cur:e.cur,mode:e.mode,q:e.rawQty,p:e.rawPrice,pr:e.rawPrem},
+    entry:{unit:e.unit,cur:e.cur,mode:e.mode,q:e.rawQty,p:e.rawPrice,pr:e.rawPrem,pieces:e.pieces},
     sold:isSold,
     soldDate:isSold?($('#fSoldDate').value||new Date().toISOString().slice(0,10)):'',
     soldTotal:isSold?curToUsd(soldAmt,soldCur):0,
@@ -1691,7 +1701,7 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
     const inv=Array.isArray(d.investments)?d.investments:null, al=Array.isArray(d.alerts)?d.alerts:[], sn=Array.isArray(d.snapshots)?d.snapshots:[];
     if(!inv&&!al.length) throw new Error('format');
     confirmDialog('Importer cette sauvegarde ?',`${(inv||[]).length} position(s), ${al.length} alerte(s). Vos données actuelles seront remplacées.`,()=>{
-      state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, sold:!!p.sold, soldDate:p.soldDate||'', soldTotal:+p.soldTotal||0, sellEntry:p.sellEntry&&typeof p.sellEntry==='object'?p.sellEntry:null, details:Array.isArray(p.details)?p.details.map(d=>({k:String(d&&d.k||''),v:String(d&&d.v||'')})).filter(d=>d.k||d.v):[], createdAt:p.createdAt||Date.now() }));
+      state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, pieces:Math.max(1,Math.round(+p.pieces||1)), date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, sold:!!p.sold, soldDate:p.soldDate||'', soldTotal:+p.soldTotal||0, sellEntry:p.sellEntry&&typeof p.sellEntry==='object'?p.sellEntry:null, details:Array.isArray(p.details)?p.details.map(d=>({k:String(d&&d.k||''),v:String(d&&d.v||'')})).filter(d=>d.k||d.v):[], createdAt:p.createdAt||Date.now() }));
       state.alerts=al.map(a=>({ id:a.id||uid(), metal:(a.metal==='RATIO'||METALS[a.metal])?a.metal:'XAU', dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, createdAt:a.createdAt||Date.now() }));
       state.snapshots=sn.filter(s=>s&&isFinite(s.v)&&s.t).map(s=>({t:s.t,v:+s.v,p:s.p&&typeof s.p==='object'?s.p:undefined}));
       if(d.currency&&CURRENCIES.includes(d.currency)) state.currency=d.currency;
