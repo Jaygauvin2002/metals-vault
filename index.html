@@ -1873,7 +1873,7 @@ setInterval(()=>{ const c=$('#statusChip'); if(!refreshing&&c&&!c.classList.cont
    ============================================================ */
 const SUPA_URL='https://gngstdqzlcvewridqazk.supabase.co';
 const SUPA_KEY='sb_publishable_VehRwNu2_TKjHF__1G5zvA__rz5bLx7';
-let supa=null, supaUser=null, supaReady=false, otpEmail='';
+let supa=null, supaUser=null, supaReady=false;
 async function initSupabase(){
   try{
     const m=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
@@ -1895,46 +1895,45 @@ function renderAccount(){
     const r=$('#acctRetry'); if(r) r.addEventListener('click',initSupabase); return; }
   if(supaUser){
     c.innerHTML=`<div class="set-row"><div class="mid"><div class="t">✅ Connecté</div><div class="d">${escapeHtml(supaUser.email||'compte')} · <span id="syncBadge">prêt</span></div></div>
-      <div style="display:flex;gap:8px"><button class="btn sm" id="btnSyncNow">Synchroniser</button><button class="btn sm ghost" id="btnSignout">Déconnexion</button></div></div>`;
+      <div style="display:flex;gap:8px"><button class="btn sm" id="btnSyncNow">Synchroniser</button><button class="btn sm ghost" id="btnSignout">Déconnexion</button></div></div>
+      <div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">🔑 Mot de passe</div><div class="d">Définis-en un pour te connecter sur iPhone (ou tout appareil) sans courriel — même compte, mêmes données.</div></div></div>
+      <div style="display:flex;gap:8px;padding:0 2px 2px">
+        <input id="setPw" type="password" autocomplete="new-password" placeholder="nouveau mot de passe (min. 6)" style="flex:1;min-width:0;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none">
+        <button class="btn sm" id="btnSetPw" style="white-space:nowrap">Enregistrer</button>
+      </div>`;
     $('#btnSignout').addEventListener('click',async()=>{ try{ await supa.auth.signOut(); toast('Déconnecté','ok'); setSyncStatus('idle'); }catch(e){} });
     $('#btnSyncNow').addEventListener('click',()=>{ pullState(); });
+    $('#btnSetPw').addEventListener('click',setPassword);
+    $('#setPw').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); setPassword(); } });
     updateSyncBadge();
-  } else if(otpEmail){
-    c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Entre le code</div><div class="d">Un code à 6 chiffres a été envoyé à <b style="color:var(--tx)">${escapeHtml(otpEmail)}</b>. Regarde tes courriels (et les indésirables).</div></div></div>
-      <div style="padding:2px 2px 4px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">
-          <input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" style="flex:1;min-width:140px;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;letter-spacing:4px;font-size:18px;font-weight:700;text-align:center">
-          <button class="btn sm" id="btnVerify" style="white-space:nowrap">Se connecter</button>
-        </div>
-        <button class="btn sm ghost" id="btnResend" style="width:100%">Renvoyer / changer d'e-mail</button>
-      </div>`;
-    $('#btnVerify').addEventListener('click',verifyCode);
-    $('#otpCode').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); verifyCode(); } });
-    $('#btnResend').addEventListener('click',()=>{ otpEmail=''; renderAccount(); });
-    setTimeout(()=>{ try{ $('#otpCode').focus(); }catch(e){} },60);
   } else {
-    c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Se connecter</div><div class="d">Sauvegarde et synchronise tes données en privé (accès réservé à ton compte). Optionnel — l’app marche sans.</div></div></div>
+    c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Se connecter</div><div class="d">Sauvegarde et synchronise tes données en privé. Optionnel — l’app marche sans.</div></div></div>
       <div style="padding:2px 2px 4px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">
-          <input id="loginEmail" type="email" placeholder="ton@courriel.com" autocomplete="email" style="flex:1;min-width:190px;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none">
-          <button class="btn sm" id="btnMagic" style="white-space:nowrap">Recevoir le code</button>
-        </div>
-        <div class="muted" style="font-size:12px">Un code à 6 chiffres t'est envoyé par courriel (idéal sur iPhone — rien à retenir).</div>
+        <input id="loginEmail" type="email" placeholder="ton@courriel.com" autocomplete="email" style="width:100%;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;margin-bottom:8px">
+        <input id="loginPw" type="password" placeholder="mot de passe" autocomplete="current-password" style="width:100%;padding:11px 13px;border-radius:12px;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);outline:none;margin-bottom:9px">
+        <button class="btn sm" id="btnPwLogin" style="width:100%;margin-bottom:8px">Se connecter</button>
+        <button class="btn sm ghost" id="btnMagic" style="width:100%">Recevoir un lien par courriel</button>
+        <div class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.5">Pas encore de mot de passe ? Sur ton <b>ordinateur</b>, connecte-toi par lien, puis règle un mot de passe dans Réglages. Ensuite utilise-le ici — idéal sur iPhone.</div>
       </div>`;
-    $('#btnMagic').addEventListener('click',sendCode);
-    $('#loginEmail').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendCode(); } });
+    $('#btnPwLogin').addEventListener('click',pwLogin);
+    $('#loginPw').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pwLogin(); } });
+    $('#btnMagic').addEventListener('click',sendMagicLink);
   }
 }
-async function sendCode(){ if(!supa) return; const email=($('#loginEmail').value||'').trim();
+async function pwLogin(){ if(!supa) return; const email=($('#loginEmail').value||'').trim(), pw=$('#loginPw').value||'';
   if(!/.+@.+\..+/.test(email)){ toast('Entre un courriel valide','err'); return; }
-  try{ const {error}=await supa.auth.signInWithOtp({email,options:{shouldCreateUser:true}}); if(error) throw error;
-    otpEmail=email; renderAccount(); toast('Code envoyé ! Vérifie tes courriels.','ok',6000); }
+  if(pw.length<6){ toast('Mot de passe trop court','err'); return; }
+  try{ const {error}=await supa.auth.signInWithPassword({email,password:pw}); if(error) throw error; }
+  catch(e){ toast('Connexion échouée : '+(e.message||e),'err',6000); } }
+async function sendMagicLink(){ if(!supa) return; const email=($('#loginEmail').value||'').trim();
+  if(!/.+@.+\..+/.test(email)){ toast('Entre un courriel valide','err'); return; }
+  try{ const {error}=await supa.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}}); if(error) throw error;
+    toast('Lien envoyé ! Ouvre-le sur cet appareil.','ok',6000); }
   catch(e){ toast('Échec : '+(e.message||e),'err',6000); } }
-async function verifyCode(){ if(!supa) return; const token=($('#otpCode').value||'').replace(/\D/g,'');
-  if(token.length<6){ toast('Entre le code à 6 chiffres','err'); return; }
-  try{ const {error}=await supa.auth.verifyOtp({email:otpEmail,token,type:'email'}); if(error) throw error;
-    otpEmail=''; /* onAuthStateChange (SIGNED_IN) affiche « connecté » et lance la synchro */ }
-  catch(e){ toast('Code invalide ou expiré : '+(e.message||e),'err',6000); } }
+async function setPassword(){ if(!supa) return; const pw=$('#setPw').value||'';
+  if(pw.length<6){ toast('Au moins 6 caractères','err'); return; }
+  try{ const {error}=await supa.auth.updateUser({password:pw}); if(error) throw error; $('#setPw').value=''; toast('Mot de passe défini ✓ Utilise ce courriel + mot de passe sur iPhone.','ok',5500); }
+  catch(e){ toast('Échec : '+(e.message||e),'err',6000); } }
 
 /* ---- synchronisation des données (table user_state) ---- */
 let syncTimer=null, syncing=false, pulling=false, applyingRemote=false, syncStatus='idle';
