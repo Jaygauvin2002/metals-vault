@@ -62,9 +62,9 @@
   .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px;min-width:0}
   .brand>div{min-width:0;overflow:hidden}
   .brand small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .brand .logo{width:30px;height:30px;border-radius:9px;flex:0 0 auto;
-    background:linear-gradient(140deg,#f5d67a,#e69a5c 55%,#b86b3a);
-    box-shadow:0 3px 10px rgba(245,214,122,.25),inset 0 0 0 1px rgba(255,255,255,.25)}
+  .brand .logo{width:34px;height:34px;border-radius:10px;flex:0 0 auto;overflow:hidden;
+    box-shadow:0 3px 10px rgba(245,214,122,.22)}
+  .brand .logo svg{display:block;width:100%;height:100%}
   .brand small{display:block;font-weight:500;font-size:11px;color:var(--mut);letter-spacing:.3px}
   .top .spacer{flex:1}
   .iconbtn{width:38px;height:38px;border-radius:12px;background:var(--surf);border:1px solid var(--line);
@@ -436,7 +436,7 @@
 <div id="app">
   <div class="topbar">
     <header class="top">
-      <div class="brand"><span class="logo"></span><div>Metals&nbsp;Vault<small>Or · Argent · Platine · Palladium · Cuivre</small></div></div>
+      <div class="brand"><span class="logo"><svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="lgbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17233f"/><stop offset="1" stop-color="#090e1c"/></linearGradient></defs><rect width="48" height="48" fill="url(#lgbg)"/><circle cx="24" cy="24" r="15.5" fill="none" stroke="#f2cf6a" stroke-width="3"/><circle cx="24" cy="24" r="11.4" fill="#0c1326" stroke="#c4863c" stroke-width="1"/><g stroke="#f2cf6a" stroke-width="2.6" stroke-linecap="round"><line x1="24" y1="24" x2="24" y2="15.2"/><line x1="24" y1="24" x2="31.6" y2="28.4"/><line x1="24" y1="24" x2="16.4" y2="28.4"/></g><g fill="#ffe8a6"><circle cx="24" cy="14.6" r="2.7"/><circle cx="32" cy="28.9" r="2.7"/><circle cx="16" cy="28.9" r="2.7"/></g><circle cx="24" cy="24" r="3.4" fill="#f2cf6a"/></svg></span><div>Metals&nbsp;Vault<small>Or · Argent · Platine · Palladium · Cuivre</small></div></div>
       <span class="spacer"></span>
       <button class="chip" id="curBtn" title="Changer de devise" aria-label="Changer de devise"><span id="curLabel">CAD</span> ⇄</button>
       <button class="iconbtn" id="addBtn" title="Ajouter une position (N)" aria-label="Ajouter une position">＋</button>
@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
