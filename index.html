@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -2017,13 +2017,33 @@ initSupabase();
 setStatus(navigator.onLine?'ok':'off');
 if(Object.keys(state.prices).length) $('#statusText').textContent='Cache';
 refresh(true);
+// Auto-updateur robuste (indépendant du service worker, contourne le cache iOS) :
+// on lit la version réelle en ligne (requête non mise en cache) et, si elle diffère,
+// on vide le cache + désinscrit le SW + recharge — automatiquement.
+let _updating=false;
+async function checkForUpdate(){
+  if(_updating) return;
+  try{
+    const r=await fetch('./sw.js?v='+Date.now(),{cache:'no-store'});
+    const m=(await r.text()).match(/mv-shell-(v\d+)/);
+    if(!m) return;
+    if(m[1]===APP_VERSION){ sessionStorage.removeItem('mv_updTry'); return; }   // à jour
+    if(sessionStorage.getItem('mv_updTry')) return;                            // déjà tenté ce lancement → évite la boucle
+    sessionStorage.setItem('mv_updTry','1'); _updating=true;
+    toast('Nouvelle version — mise à jour…','info',2500);
+    try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+    try{ if('serviceWorker' in navigator){ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(x=>x.unregister())); } }catch(e){}
+    setTimeout(()=>location.reload(),700);
+  }catch(e){}
+}
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{ try{ reg.update(); }catch(e){} }).catch(()=>{}); });
   let swReloaded=false;
   navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(swReloaded) return; swReloaded=true; location.reload(); });
-  // vérifie une nouvelle version au retour dans l'app
-  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') navigator.serviceWorker.getRegistration().then(r=>{ if(r) try{ r.update(); }catch(e){} }); });
 }
+// vérifie à l'ouverture et à chaque retour dans l'app
+setTimeout(checkForUpdate,1500);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkForUpdate(); });
 </script>
 </body>
 </html>
