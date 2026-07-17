@@ -701,6 +701,8 @@
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
+// Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
+const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
 const PANA_CHECK=[
   "Déclarer à l'ASFC si transport de +10 000 $ CAD",
   "Formulaire BSF407 avant le départ (preuve de possession)",
@@ -723,7 +725,8 @@ const CUR_NAMES = { CAD:'Dollar canadien',USD:'Dollar américain',EUR:'Euro',GBP
 const RANGES = [{k:'7J',d:7},{k:'1M',d:30},{k:'3M',d:90},{k:'6M',d:180},{k:'1A',d:365},{k:'Max',d:null}];
 
 function load(key, fb){ try{ const v=localStorage.getItem(key); return v==null?fb:JSON.parse(v); }catch(e){ return fb; } }
-function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+  if(typeof SYNC_KEYS!=='undefined'&&SYNC_KEYS.indexOf(key)>=0) markDirty(); }
 
 const state = {
   currency: load(K.cur,'CAD'),
@@ -1873,7 +1876,11 @@ async function initSupabase(){
     supa=m.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'mv_supabase_auth'}});
     supaReady=true;
     const {data}=await supa.auth.getSession(); supaUser=data&&data.session?data.session.user:null;
-    supa.auth.onAuthStateChange((ev,session)=>{ const was=!!supaUser; supaUser=session?session.user:null; renderAccount(); if(!was&&supaUser) toast('Connecté : '+(supaUser.email||'compte'),'ok',3500); });
+    supa.auth.onAuthStateChange((ev,session)=>{ const was=!!supaUser; supaUser=session?session.user:null; renderAccount();
+      if(!was&&supaUser){ toast('Connecté : '+(supaUser.email||'compte'),'ok',3500); }
+      if(ev==='SIGNED_IN'&&supaUser){ pullState(); }
+      else if(ev==='SIGNED_OUT'){ setSyncStatus('idle'); } });
+    if(supaUser){ pullState(); }
     if(location.hash&&/access_token=|error=|type=recovery/.test(location.hash)){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
   }catch(e){ supaReady=false; }
   renderAccount();
@@ -1883,8 +1890,11 @@ function renderAccount(){
   if(!supaReady){ c.innerHTML='<div class="set-row"><div class="mid"><div class="t">Connexion indisponible</div><div class="d">Hors-ligne ou service inaccessible pour l’instant. L’app fonctionne quand même en local.</div></div><button class="btn sm" id="acctRetry">Réessayer</button></div>';
     const r=$('#acctRetry'); if(r) r.addEventListener('click',initSupabase); return; }
   if(supaUser){
-    c.innerHTML=`<div class="set-row"><div class="mid"><div class="t">✅ Connecté</div><div class="d">${escapeHtml(supaUser.email||'compte')}</div></div><button class="btn sm" id="btnSignout">Se déconnecter</button></div>`;
-    $('#btnSignout').addEventListener('click',async()=>{ try{ await supa.auth.signOut(); toast('Déconnecté','ok'); }catch(e){} });
+    c.innerHTML=`<div class="set-row"><div class="mid"><div class="t">✅ Connecté</div><div class="d">${escapeHtml(supaUser.email||'compte')} · <span id="syncBadge">prêt</span></div></div>
+      <div style="display:flex;gap:8px"><button class="btn sm" id="btnSyncNow">Synchroniser</button><button class="btn sm ghost" id="btnSignout">Déconnexion</button></div></div>`;
+    $('#btnSignout').addEventListener('click',async()=>{ try{ await supa.auth.signOut(); toast('Déconnecté','ok'); setSyncStatus('idle'); }catch(e){} });
+    $('#btnSyncNow').addEventListener('click',()=>{ pullState(); });
+    updateSyncBadge();
   } else {
     c.innerHTML=`<div class="set-row" style="align-items:flex-start"><div class="mid"><div class="t">Se connecter</div><div class="d">Sauvegarde et synchronise tes données en privé (accès réservé à ton compte). Optionnel — l’app marche sans.</div></div></div>
       <div style="padding:2px 2px 4px">
@@ -1907,6 +1917,54 @@ async function sendMagicLink(){ if(!supa) return; const email=($('#loginEmail').
 async function signInGoogle(){ if(!supa) return;
   try{ const {error}=await supa.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}}); if(error) throw error; }
   catch(e){ toast('Google indisponible : '+(e.message||e),'err',6000); } }
+
+/* ---- synchronisation des données (table user_state) ---- */
+let syncTimer=null, syncing=false, pulling=false, applyingRemote=false, syncStatus='idle';
+function setSyncStatus(s){ syncStatus=s; updateSyncBadge(); }
+function updateSyncBadge(){ const b=$('#syncBadge'); if(!b) return;
+  const map={idle:'prêt',syncing:'synchronisation…',ok:'synchronisé ✓',err:'erreur de synchro'};
+  b.textContent=map[syncStatus]||''; b.style.color=syncStatus==='err'?'var(--down)':syncStatus==='ok'?'var(--up)':'var(--mut)'; }
+function localStamp(){ return +localStorage.getItem('mv_syncStamp')||0; }
+function markDirty(){ if(applyingRemote) return; try{ localStorage.setItem('mv_syncStamp',String(Date.now())); }catch(e){}
+  if(!(supaReady&&supaUser)) return; clearTimeout(syncTimer); syncTimer=setTimeout(pushState,1800); }
+function collectState(){ return { investments:state.investments, alerts:state.alerts, snapshots:state.snapshots,
+  currency:state.currency, taxRate:state.taxRate, marginalRate:state.marginalRate, ratioA:state.ratioA, ratioB:state.ratioB }; }
+async function pushState(){ if(!(supaReady&&supaUser)||syncing||applyingRemote) return; syncing=true; setSyncStatus('syncing');
+  try{ const stamp=localStamp()||Date.now();
+    const {error}=await supa.from('user_state').upsert({user_id:supaUser.id,data:collectState(),updated_at:new Date(stamp).toISOString()},{onConflict:'user_id'});
+    if(error) throw error; setSyncStatus('ok'); }
+  catch(e){ setSyncStatus('err'); }
+  finally{ syncing=false; } }
+async function pullState(){ if(!(supaReady&&supaUser)||pulling) return; pulling=true; setSyncStatus('syncing');
+  try{ const {data,error}=await supa.from('user_state').select('data,updated_at').eq('user_id',supaUser.id).maybeSingle();
+    if(error) throw error;
+    if(data&&data.data&&Object.keys(data.data).length){ const remoteStamp=Date.parse(data.updated_at)||0, ls=localStamp();
+      if(remoteStamp>ls) applyRemote(data.data,remoteStamp);
+      else if(ls>remoteStamp){ pulling=false; return pushState(); }
+      setSyncStatus('ok');
+    } else { pulling=false; return pushState(); } // rien en ligne → pousser le local
+  }catch(e){ setSyncStatus('err'); }
+  finally{ pulling=false; } }
+function applyRemote(d,stamp){
+  try{ localStorage.setItem('mv_preSync_backup',JSON.stringify(collectState())); }catch(e){}
+  applyingRemote=true;
+  try{
+    if(Array.isArray(d.investments)) state.investments=d.investments;
+    if(Array.isArray(d.alerts)) state.alerts=d.alerts;
+    if(Array.isArray(d.snapshots)) state.snapshots=d.snapshots;
+    if(typeof d.currency==='string'&&CURRENCIES.includes(d.currency)) state.currency=d.currency;
+    if(typeof d.taxRate==='number'&&isFinite(d.taxRate)) state.taxRate=d.taxRate;
+    if(typeof d.marginalRate==='number'&&isFinite(d.marginalRate)) state.marginalRate=d.marginalRate;
+    if(METALS[d.ratioA]) state.ratioA=d.ratioA;
+    if(METALS[d.ratioB]&&d.ratioB!==state.ratioA) state.ratioB=d.ratioB;
+    save(K.inv,state.investments); save(K.al,state.alerts); save(K.snap,state.snapshots); save(K.cur,state.currency);
+    save(K.tax,state.taxRate); save('mv_taxMarginal',state.marginalRate); save('mv_ratioA',state.ratioA); save('mv_ratioB',state.ratioB);
+    try{ localStorage.setItem('mv_syncStamp',String(stamp)); }catch(e){}
+    $('#curLabel').textContent=state.currency; renderAll(); loadInvoices();
+  } finally{ applyingRemote=false; }
+  toast('Données récupérées depuis le cloud','ok',3000);
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'&&supaReady&&supaUser) pushState(); });
 
 /* ---- boot ---- */
 $('#curLabel').textContent=state.currency;
