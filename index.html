@@ -493,17 +493,13 @@
   <h3 id="posSheetTitle">Ajouter une position</h3>
   <div class="field"><label>Type</label><div class="seg" id="typeSeg"><button data-t="buy">Achat</button><button data-t="sell">Vente</button></div></div>
   <div class="field"><label>Métal</label><div class="seg" id="metalSeg"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="XPT">Platine</button><button data-m="XPD">Palladium</button><button data-m="HG">Cuivre</button></div></div>
-  <div class="field"><label>Mode de coût</label><div class="seg" id="modeSeg"><button data-mode="peroz">Par once</button><button data-mode="total">Montant total</button></div></div>
   <div class="two">
     <div class="field"><label>Quantité</label>
       <div style="display:flex;gap:8px"><input id="fQty" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="fUnit" style="width:74px"><option value="oz">oz</option><option value="g">g</option><option value="kg">kg</option></select></div></div>
-    <div class="field"><label id="fPriceLbl">Prix spot achat</label>
+    <div class="field"><label id="fPriceLbl">Coût total payé</label>
       <div style="display:flex;gap:8px"><input id="fPrice" type="number" inputmode="decimal" step="any" placeholder="0" style="flex:1"><select id="fCur" style="width:78px"></select></div></div>
   </div>
-  <div class="two">
-    <div class="field" id="fPremWrap"><label>Prime payée <span class="hint">(par once, option.)</span></label><input id="fPrem" type="number" inputmode="decimal" step="any" placeholder="0"></div>
-    <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
-  </div>
+  <div class="field"><label id="fDateLbl">Date d'achat</label><input id="fDate" type="date"></div>
   <div class="field"><label>Note <span class="hint">(optionnel)</span></label><input id="fNote" type="text" placeholder="ex. Lingot 1 oz, Maple Leaf…"></div>
   <div class="calc" id="posCalc"></div>
   <button class="btn primary" id="savePos">Enregistrer</button>
@@ -1128,31 +1124,26 @@ function closeSheet(){ if(openSheetEl){ openSheetEl.classList.remove('open'); op
 scrim.addEventListener('click',closeSheet);
 $$('.grab').forEach(g=>g.addEventListener('click',closeSheet));
 
-let editId=null, selMetal='XAU', selType='buy', selMode='peroz';
+let editId=null, selMetal='XAU', selType='buy', selMode='total';
 function fillCurSelect(sel){ if(!sel.options.length) sel.innerHTML=CURRENCIES.map(c=>`<option value="${c}">${c}</option>`).join(''); }
 function netQtyExcluding(m,exclId){ let b=0,s=0; for(const p of state.investments){ if(p.metal!==m||p.id===exclId) continue; const q=+p.qty||0; if(isSell(p))s+=q; else b+=q; } return Math.max(0,b-s); }
 function setSegMetal(seg,m){ selMetal=m; $$('button',seg).forEach(b=>b.classList.toggle('on',b.dataset.m===m)); updatePosCalc(); }
 function setSegType(t){ selType=t; $$('#typeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); updatePosUI(); }
-function setSegMode(mo){ selMode=mo; $$('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.mode===mo)); updatePosUI(); }
 $$('#metalSeg button').forEach(b=>b.addEventListener('click',()=>setSegMetal($('#metalSeg'),b.dataset.m)));
 $$('#typeSeg button').forEach(b=>b.addEventListener('click',()=>setSegType(b.dataset.t)));
-$$('#modeSeg button').forEach(b=>b.addEventListener('click',()=>setSegMode(b.dataset.mode)));
-['#fQty','#fPrice','#fPrem'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
+['#fQty','#fPrice'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
 ['#fUnit','#fCur'].forEach(s=>$(s).addEventListener('change',updatePosCalc));
 
 function readPosInputs(){
-  const unit=$('#fUnit').value, cur=$('#fCur').value, mode=selMode, type=selType;
-  const rawQty=+$('#fQty').value||0, rawPrice=+$('#fPrice').value||0, rawPrem=+$('#fPrem').value||0;
+  const unit=$('#fUnit').value, cur=$('#fCur').value, mode='total', type=selType;
+  const rawQty=+$('#fQty').value||0, rawPrice=+$('#fPrice').value||0, rawPrem=0;
   const qtyOz=qtyToOz(rawQty,unit);
-  let priceUsdOz=0, premUsdOz=0;
-  if(mode==='total'){ const totalUsd=curToUsd(rawPrice,cur); priceUsdOz=qtyOz>0?totalUsd/qtyOz:0; }
-  else { priceUsdOz=curToUsd(rawPrice,cur); premUsdOz=type==='buy'?curToUsd(rawPrem,cur):0; }
+  const totalUsd=curToUsd(rawPrice,cur), priceUsdOz=qtyOz>0?totalUsd/qtyOz:0, premUsdOz=0;
   return {type,unit,cur,mode,rawQty,rawPrice,rawPrem,qtyOz,priceUsdOz,premUsdOz};
 }
 function updatePosUI(){
-  const isBuy=selType==='buy', isTotal=selMode==='total';
-  $('#fPremWrap').style.display=(isBuy&&!isTotal)?'':'none';
-  $('#fPriceLbl').textContent = isTotal ? (isBuy?'Coût total payé':'Montant total reçu') : (isBuy?'Prix spot à l’achat':'Prix de vente');
+  const isBuy=selType==='buy';
+  $('#fPriceLbl').textContent = isBuy?'Coût total payé':'Montant total reçu';
   $('#fDateLbl').textContent = isBuy?'Date d’achat':'Date de vente';
   updatePosCalc();
 }
@@ -1178,15 +1169,19 @@ function openPosSheet(id){
     $('#posSheetTitle').textContent='Modifier la position';
     setSegType(isSell(p)?'sell':'buy'); setSegMetal($('#metalSeg'),p.metal);
     const en=p.entry;
-    if(en){ setSegMode(en.mode==='total'?'total':'peroz'); $('#fUnit').value=['oz','g','kg'].includes(en.unit)?en.unit:'oz';
-      $('#fCur').value=CURRENCIES.includes(en.cur)?en.cur:'USD'; $('#fQty').value=en.q||''; $('#fPrice').value=en.p||''; $('#fPrem').value=en.pr||''; }
-    else { setSegMode('peroz'); $('#fUnit').value='oz'; $('#fCur').value='USD'; $('#fQty').value=p.qty; $('#fPrice').value=p.price; $('#fPrem').value=p.premium||''; }
+    const cur=en&&CURRENCIES.includes(en.cur)?en.cur:'USD';
+    const unit=en&&['oz','g','kg'].includes(en.unit)?en.unit:'oz';
+    const totalUsd=((+p.price||0)+(+p.premium||0))*(+p.qty||0);
+    const totalCur=usdToCur(totalUsd,cur);
+    $('#fUnit').value=unit; $('#fCur').value=cur;
+    $('#fQty').value = en&&en.q ? en.q : (ozToQty(+p.qty||0,unit)||'');
+    $('#fPrice').value = totalCur ? Math.round(totalCur*100)/100 : '';
     $('#fDate').value=p.date||''; $('#fNote').value=p.note||''; del.style.display='block';
   } else {
     $('#posSheetTitle').textContent='Ajouter une position';
-    setSegType('buy'); setSegMetal($('#metalSeg'),'XAU'); setSegMode('peroz');
+    setSegType('buy'); setSegMetal($('#metalSeg'),'XAU');
     $('#fUnit').value='oz'; $('#fCur').value=CURRENCIES.includes(state.currency)?state.currency:'USD';
-    $('#fQty').value=''; $('#fPrice').value=''; $('#fPrem').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
+    $('#fQty').value=''; $('#fPrice').value=''; $('#fNote').value=''; $('#fDate').value=new Date().toISOString().slice(0,10); del.style.display='none';
   }
   updatePosUI(); openSheet($('#posSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#fQty').focus(); }catch(e){} },330);
