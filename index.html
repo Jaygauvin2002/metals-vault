@@ -288,6 +288,18 @@
   .pana-hero .amt{font-size:clamp(32px,9vw,42px);font-weight:800;color:var(--up);margin:8px 0 4px;letter-spacing:-1px;font-variant-numeric:tabular-nums}
   .pana-hero .sub{font-size:12.5px;color:var(--mut)}
   .pana-cmp{display:grid;grid-template-columns:1fr 1fr}
+  .pbar-head{font-size:12.5px;color:var(--mut);margin-bottom:10px}
+  .pbar-head b{color:var(--tx)}
+  .pbar-row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .pbar-lbl{width:96px;font-size:13px;font-weight:600;flex:0 0 auto}
+  .pbar{flex:1;height:16px;border-radius:8px;overflow:hidden;display:flex;background:var(--surf2)}
+  .pbar i{height:100%;display:block}
+  .pbar i.net{background:linear-gradient(90deg,#2fb488,#3ad6a0)}
+  .pbar i.tax{background:linear-gradient(90deg,#e0555d,#ff6f78)}
+  .pbar-net{width:104px;text-align:right;font-size:12.5px;font-weight:700;flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .pbar-legend{display:flex;gap:18px;justify-content:center;margin-top:10px;font-size:11.5px;color:var(--mut)}
+  .pbar-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  .pbar-legend i.net{background:#3ad6a0}.pbar-legend i.tax{background:#ff6f78}
   .pana-cmp .c{padding:15px 12px;text-align:center}
   .pana-cmp .c:first-child{border-right:1px solid var(--line)}
   .pana-cmp .c .k{font-size:12.5px;color:var(--mut)}
@@ -525,6 +537,7 @@
           <div class="c"><div class="k">Impôt si vente au Panama</div><div class="v" id="panaPa" style="color:var(--up)">0 $</div></div>
         </div>
       </div>
+      <div class="card" id="panaBars" style="display:none"></div>
       <div class="card">
         <div class="set-row" style="border:0;padding:6px 4px">
           <div class="mid"><div class="t">Taux marginal d'impôt (Québec)</div><div class="d" id="panaGain">—</div></div>
@@ -707,7 +720,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -987,6 +1000,18 @@ function renderPanama(){
   $('#panaQc').textContent=(qc>0?'−':'')+fmtMoney(qc);
   $('#panaGain').innerHTML=`Gain non réalisé : <b>${fmtMoney(gain)}</b> · imposable 50 % : <b>${fmtMoney(taxable)}</b>${Math.abs(p.realized)>=0.005?` · déjà réalisé : ${fmtMoney(p.realized)}`:''}`;
   const inp=$('#panaRate'); if(document.activeElement!==inp) inp.value=marg;
+  // barres : ce que tu conserves sur le gain (Québec vs Panama)
+  const bars=$('#panaBars');
+  if(gain>0){
+    const netQc=gain-qc;
+    const row=(flag,lbl,net,tax)=>`<div class="pbar-row"><div class="pbar-lbl">${flag} ${lbl}</div>
+      <div class="pbar"><i class="net" style="width:${(net/gain*100).toFixed(1)}%"></i>${tax>0?`<i class="tax" style="width:${(tax/gain*100).toFixed(1)}%"></i>`:''}</div>
+      <div class="pbar-net">${fmtMoney(net)}</div></div>`;
+    bars.innerHTML=`<div class="pbar-head">Sur un gain de <b>${fmtMoney(gain)}</b>, ce que tu <b>conserves</b> :</div>
+      ${row('🇨🇦','Québec',netQc,qc)}${row('🇵🇦','Panama',gain,0)}
+      <div class="pbar-legend"><span><i class="net"></i>conservé</span><span><i class="tax"></i>impôt</span></div>`;
+    bars.style.display='';
+  } else bars.style.display='none';
   $('#panaCheck').innerHTML=PANA_CHECK.map(t=>`<div class="check"><span class="mk">✓</span><span>${escapeHtml(t)}</span></div>`).join('');
 }
 
