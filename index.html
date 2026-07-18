@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1518,7 +1518,7 @@ function renderRangeChips(){
 }
 function seriesPoints(){
   if(histSeries==='value') return state.snapshots.filter(s=>isFinite(s.v)&&s.v>0).map(s=>({t:s.t,y:s.v}));
-  if(histSeries==='RATIO') return state.snapshots.filter(s=>s.p&&s.p.XAU>0&&s.p.XAG>0).map(s=>({t:s.t,y:s.p.XAU/s.p.XAG}));
+  if(histSeries==='RATIO'){ const A=state.ratioA,B=state.ratioB; return state.snapshots.filter(s=>s.p&&s.p[A]>0&&s.p[B]>0).map(s=>({t:s.t,y:s.p[A]/s.p[B]})); }
   return state.snapshots.filter(s=>s.p&&typeof s.p[histSeries]==='number').map(s=>({t:s.t,y:s.p[histSeries]}));
 }
 function renderHistory(){
@@ -1528,8 +1528,15 @@ function renderHistory(){
   const now=Date.now(), cutoff=range.d?now-range.d*86400000:0;
   let pts=seriesPoints().filter(p=>p.t>=cutoff);
   const isVal=histSeries==='value', isRatio=histSeries==='RATIO';
-  $('#histHint').textContent = isVal?'valeur du portefeuille':isRatio?'ratio or/argent':'cours '+METALS[histSeries].name.toLowerCase();
-  drawChart($('#chartWrap'), pts, {value:isVal, kind:isRatio?'ratio':'money', refs:isRatio?[60,80]:null});
+  let refs=null;
+  if(isRatio){ const A=state.ratioA,B=state.ratioB;
+    const btn=$('#seriesSeg button[data-s="RATIO"]'); if(btn) btn.textContent='Ratio '+METALS[A].ab+'/'+METALS[B].ab;
+    $('#histHint').textContent='ratio '+METALS[A].name.toLowerCase()+'/'+METALS[B].name.toLowerCase();
+    const rr=ratioRef(A,B,pts.map(p=>p.y)); if(rr.hasRef) refs=[rr.strongLow,rr.strongHigh];
+  } else {
+    $('#histHint').textContent = isVal?'valeur du portefeuille':'cours '+METALS[histSeries].name.toLowerCase();
+  }
+  drawChart($('#chartWrap'), pts, {value:isVal, kind:isRatio?'ratio':'money', refs:refs});
   renderHistStats(pts, isVal, isRatio);
 }
 function renderHistStats(pts, isVal, isRatio){
