@@ -721,7 +721,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1176,11 +1176,15 @@ function renderHomeData(p){
     const fill=t.cost>0?Math.min(140,t.value/t.cost*100):100;
     const dc=metalDayChange(m);
     const dcTag=dc!=null?` <span class="chg ${dc>=0?'up':'down'}" style="font-size:10.5px;font-weight:600">${dc>=0?'▲':'▼'}${fmtNum(Math.abs(dc),2)}% auj.</span>`:'';
+    const spot=spotUsd(m), be=t.avg, dg=be<5?3:be<50?2:2;
+    const margin=(spot>0&&be>0)?(spot-be)/be*100:null;   // marge du spot au-dessus du break-even
+    const beLine=be>0?`<div class="lab" style="margin-top:3px"><span>Break-even <b style="color:var(--tx)">${fmtMoney(be,{digits:dg})}/oz</b></span>${(spot>0&&margin!=null)?`<span style="color:${spot>=be?'var(--up)':'var(--down)'}">spot ${fmtMoney(spot,{digits:dg})} · ${margin>=0?'+':''}${fmtNum(margin,1)}%</span>`:''}</div>`:'';
     perf+=`<div class="cv">
       <div class="top"><div class="badge ${m}" style="width:30px;height:30px;border-radius:9px;font-size:12px">${METALS[m].ab}</div>
         <div class="nm">${METALS[m].name}${dcTag}</div><div class="pl ${up?'chg up':'chg down'}">${fmtPct(pct)}</div></div>
       <div class="bar"><i style="width:${Math.min(100,fill)}%;background:${up?'linear-gradient(90deg,#2fb488,#3ad6a0)':'linear-gradient(90deg,#e0555d,#ff6f78)'}"></i></div>
-      <div class="lab"><span>Coût ${fmtMoney(t.cost)} · ${fmtOz(t.qty)} oz (${weightLabel(t.qty)}) @ ${fmtMoney(t.avg,{digits:t.avg<5?3:2})}/oz</span><span>Valeur ${fmtMoney(t.value)}</span></div>
+      <div class="lab"><span>Coût ${fmtMoney(t.cost)} · ${fmtOz(t.qty)} oz (${weightLabel(t.qty)})</span><span>Valeur ${fmtMoney(t.value)}</span></div>
+      ${beLine}
     </div>`;
   }
   perf+='</div></section>';
