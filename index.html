@@ -668,7 +668,8 @@
   <h3>Nouvelle alerte</h3>
   <div class="field"><label>Suivi</label><div class="seg" id="aMetalSeg" style="flex-wrap:wrap"><button data-m="XAU">Or</button><button data-m="XAG">Argent</button><button data-m="XPT">Platine</button><button data-m="XPD">Palladium</button><button data-m="HG">Cuivre</button><button data-m="RATIO">Ratio O/A</button></div></div>
   <div class="field"><label>Condition</label><div class="seg" id="aDirSeg"><button data-d="above">Au-dessus de ▲</button><button data-d="below">Sous ▼</button></div></div>
-  <div class="field"><label>Seuil <span class="hint" id="aTargetHint">($US/oz)</span></label><input id="aTarget" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+  <div class="field"><label>Seuil <span class="hint" id="aTargetHint">($US/oz)</span></label><input id="aTarget" type="number" inputmode="decimal" step="any" placeholder="0">
+    <div class="chips" id="aPresets" style="margin-top:8px"></div></div>
   <div class="calc" id="aCalc"></div>
   <button class="btn primary" id="saveAlert">Créer l'alerte</button>
 </div>
@@ -720,7 +721,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1802,11 +1803,20 @@ function setASeg(seg,val,attr){ $$('button',seg).forEach(b=>b.classList.toggle('
 $$('#aMetalSeg button').forEach(b=>b.addEventListener('click',()=>{ aMetal=b.dataset.m; setASeg($('#aMetalSeg'),aMetal,'m'); updateACalc(); }));
 $$('#aDirSeg button').forEach(b=>b.addEventListener('click',()=>{ aDir=b.dataset.d; setASeg($('#aDirSeg'),aDir,'d'); updateACalc(); }));
 $('#aTarget').addEventListener('input',updateACalc);
+function renderAPresets(){
+  const box=$('#aPresets'); if(!box) return; const ratio=aMetal==='RATIO', cur=alertSpot(aMetal);
+  if(!(cur>0)){ box.innerHTML=''; return; }
+  const pcts=[-10,-5,5,10];
+  box.innerHTML=pcts.map(p=>`<button data-p="${p}">${p>0?'+':''}${p}%</button>`).join('');
+  $$('button',box).forEach(b=>b.addEventListener('click',()=>{ const p=+b.dataset.p, t=cur*(1+p/100);
+    $('#aTarget').value = ratio?(+t.toFixed(1)):(Math.round(t*100)/100);
+    aDir = p<0?'below':'above'; setASeg($('#aDirSeg'),aDir,'d'); updateACalc(); }));
+}
 function updateACalc(){ const ratio=aMetal==='RATIO', cur=alertSpot(aMetal),tgt=+$('#aTarget').value||0;
   $('#aTargetHint').textContent = ratio?'(ratio, ex. 85)':'($US/oz)';
   let html=cur>0?`Actuel : <b>${ratio?fmtNum(cur,1):fmtMoney(cur)}</b>`:'Valeur indisponible';
   if(tgt>0&&cur>0){ const d=(tgt-cur)/cur*100; html+=` · Seuil ${d>=0?'+':''}${fmtNum(d,1)}% vs actuel`; }
-  $('#aCalc').innerHTML=html; }
+  $('#aCalc').innerHTML=html; renderAPresets(); }
 function openAlertSheet(){ aMetal='XAU'; aDir='above'; setASeg($('#aMetalSeg'),'XAU','m'); setASeg($('#aDirSeg'),'above','d'); $('#aTarget').value='';
   const rb=$('#aMetalSeg button[data-m="RATIO"]'); if(rb) rb.textContent='Ratio '+METALS[state.ratioA].ab+'/'+METALS[state.ratioB].ab;
   updateACalc(); openSheet($('#alertSheet'));
