@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -869,13 +869,15 @@ function recordSnapshot(){
 }
 
 /* ---- alertes ---- */
-function alertSpot(metal){ return metal==='RATIO'?(gsrCurrent()||0):spotUsd(metal); }
-function alertName(a){ return a.metal==='RATIO'?'Ratio or/argent':(METALS[a.metal]?METALS[a.metal].name:a.metal); }
+function ratioValue(A,B){ const a=spotUsd(A),b=spotUsd(B); return (a>0&&b>0)?a/b:0; }
+function alertSpot(metal){ return metal==='RATIO'?ratioValue(state.ratioA,state.ratioB):spotUsd(metal); }        // pour la création (paire courante)
+function alertValue(a){ return a.metal==='RATIO'?ratioValue(a.pairA||'XAU',a.pairB||'XAG'):spotUsd(a.metal); }   // pour une alerte existante (paire figée)
+function alertName(a){ if(a.metal==='RATIO'){ const A=a.pairA||'XAU',B=a.pairB||'XAG'; return 'Ratio '+(METALS[A]?METALS[A].ab:A)+'/'+(METALS[B]?METALS[B].ab:B); } return METALS[a.metal]?METALS[a.metal].name:a.metal; }
 function fmtAlertVal(a,v){ return a.metal==='RATIO'?fmtNum(v,1):fmtMoney(v); }
 function checkAlerts(){
   let fired=0;
   for(const a of state.alerts){
-    const price=alertSpot(a.metal); if(!(price>0)) continue;
+    const price=alertValue(a); if(!(price>0)) continue;
     const hit=a.dir==='above'?price>=a.target:price<=a.target;
     if(hit&&!a.triggered){ a.triggered=true; a.firedAt=Date.now(); fired++; notifyAlert(a,price); }
     else if(!hit&&a.triggered){ a.triggered=false; }
@@ -1614,9 +1616,9 @@ function renderAlerts(){
   if(!state.alerts.length){ card.innerHTML=emptyBlock('🔔','Aucune alerte','Créez une alerte pour surveiller un cours.'); return; }
   card.innerHTML='';
   for(const a of state.alerts){
-    const price=alertSpot(a.metal), dirTxt=a.dir==='above'?'≥':'≤';
+    const price=alertValue(a), dirTxt=a.dir==='above'?'≥':'≤';
     const active=price>0?(a.dir==='above'?price>=a.target:price<=a.target):false;
-    const badge=a.metal==='RATIO'?`<div class="badge" style="background:linear-gradient(140deg,#f7e08f,#b9c4d6);color:#0b1020">O/A</div>`:`<div class="badge ${a.metal}">${METALS[a.metal].ab}</div>`;
+    const badge=a.metal==='RATIO'?`<div class="badge" style="background:linear-gradient(140deg,${METALS[a.pairA||'XAU']?METALS[a.pairA||'XAU'].c:'#e0b445'},${METALS[a.pairB||'XAG']?METALS[a.pairB||'XAG'].c:'#b9c4d6'});color:#0b1020;font-size:11px">${(METALS[a.pairA||'XAU']?METALS[a.pairA||'XAU'].ab:'Au')}/${(METALS[a.pairB||'XAG']?METALS[a.pairB||'XAG'].ab:'Ag')}</div>`:`<div class="badge ${a.metal}">${METALS[a.metal].ab}</div>`;
     const el=document.createElement('div'); el.className='metal-row';
     el.innerHTML=`${badge}
       <div class="mid"><div class="nm">${alertName(a)} ${dirTxt} ${fmtAlertVal(a,a.target)}</div>
@@ -1777,11 +1779,15 @@ function updateACalc(){ const ratio=aMetal==='RATIO', cur=alertSpot(aMetal),tgt=
   let html=cur>0?`Actuel : <b>${ratio?fmtNum(cur,1):fmtMoney(cur)}</b>`:'Valeur indisponible';
   if(tgt>0&&cur>0){ const d=(tgt-cur)/cur*100; html+=` · Seuil ${d>=0?'+':''}${fmtNum(d,1)}% vs actuel`; }
   $('#aCalc').innerHTML=html; }
-function openAlertSheet(){ aMetal='XAU'; aDir='above'; setASeg($('#aMetalSeg'),'XAU','m'); setASeg($('#aDirSeg'),'above','d'); $('#aTarget').value=''; updateACalc(); openSheet($('#alertSheet'));
+function openAlertSheet(){ aMetal='XAU'; aDir='above'; setASeg($('#aMetalSeg'),'XAU','m'); setASeg($('#aDirSeg'),'above','d'); $('#aTarget').value='';
+  const rb=$('#aMetalSeg button[data-m="RATIO"]'); if(rb) rb.textContent='Ratio '+METALS[state.ratioA].ab+'/'+METALS[state.ratioB].ab;
+  updateACalc(); openSheet($('#alertSheet'));
   if(matchMedia('(hover:hover)').matches) setTimeout(()=>{ try{ $('#aTarget').focus(); }catch(e){} },330); }
 $('#saveAlert').addEventListener('click',()=>{ const tgt=+$('#aTarget').value; if(!(tgt>0)){ toast('Entrez un seuil valide','err'); return; }
   const price=alertSpot(aMetal), met=price>0?(aDir==='above'?price>=tgt:price<=tgt):false;
-  state.alerts.push({ id:uid(), metal:aMetal, dir:aDir, target:tgt, triggered:met, createdAt:Date.now() });
+  const rec={ id:uid(), metal:aMetal, dir:aDir, target:tgt, triggered:met, createdAt:Date.now() };
+  if(aMetal==='RATIO'){ rec.pairA=state.ratioA; rec.pairB=state.ratioB; }
+  state.alerts.push(rec);
   save(K.al,state.alerts); closeSheet(); renderAlerts(); toast('Alerte créée','ok'); });
 function deleteAlert(id){ state.alerts=state.alerts.filter(a=>a.id!==id); save(K.al,state.alerts); renderAlerts(); toast('Alerte supprimée','ok'); }
 
@@ -1857,7 +1863,7 @@ $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) re
     if(!inv&&!al.length) throw new Error('format');
     confirmDialog('Importer cette sauvegarde ?',`${(inv||[]).length} position(s), ${al.length} alerte(s). Vos données actuelles seront remplacées.`,()=>{
       state.investments=(inv||[]).map(p=>({ id:p.id||uid(), type:p.type==='sell'?'sell':'buy', metal:METALS[p.metal]?p.metal:'XAU', qty:+p.qty||0, price:+p.price||0, premium:+p.premium||0, pieces:Math.max(1,Math.round(+p.pieces||1)), date:p.date||'', note:p.note||'', entry:p.entry&&typeof p.entry==='object'?p.entry:undefined, sold:!!p.sold, soldDate:p.soldDate||'', soldTotal:+p.soldTotal||0, sellEntry:p.sellEntry&&typeof p.sellEntry==='object'?p.sellEntry:null, details:Array.isArray(p.details)?p.details.map(d=>({k:String(d&&d.k||''),v:String(d&&d.v||'')})).filter(d=>d.k||d.v):[], createdAt:p.createdAt||Date.now() }));
-      state.alerts=al.map(a=>({ id:a.id||uid(), metal:(a.metal==='RATIO'||METALS[a.metal])?a.metal:'XAU', dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, createdAt:a.createdAt||Date.now() }));
+      state.alerts=al.map(a=>({ id:a.id||uid(), metal:(a.metal==='RATIO'||METALS[a.metal])?a.metal:'XAU', dir:a.dir==='below'?'below':'above', target:+a.target||0, triggered:!!a.triggered, pairA:METALS[a.pairA]?a.pairA:undefined, pairB:METALS[a.pairB]?a.pairB:undefined, createdAt:a.createdAt||Date.now() }));
       state.snapshots=sn.filter(s=>s&&isFinite(s.v)&&s.t).map(s=>({t:s.t,v:+s.v,p:s.p&&typeof s.p==='object'?s.p:undefined}));
       if(d.currency&&CURRENCIES.includes(d.currency)) state.currency=d.currency;
       if(typeof d.taxRate==='number'&&isFinite(d.taxRate)&&d.taxRate>=0){ state.taxRate=d.taxRate; save(K.tax,d.taxRate); }
