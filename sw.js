@@ -1,7 +1,7 @@
 /* Metals Vault — service worker
    Stratégie : app-shell précaché + stale-while-revalidate pour le même-origine.
    Les appels d'API (gold-api / er-api) passent directement au réseau. */
-const CACHE = 'mv-shell-v41';
+const CACHE = 'mv-shell-v42';
 const SHELL = [
   './',
   './index.html',

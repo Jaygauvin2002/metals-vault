@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -845,7 +845,7 @@ async function refresh(silent=false){
     const [prices,fx]=await Promise.all([fetchPrices(),fetchFx()]);
     if(prices){ state.prevPrices={...state.prices}; state.prices={...state.prices,...prices}; save(K.last,state.prices); state.lastFetch=Date.now(); }
     if(fx){ state.fx=fx; save(K.fx,fx); }
-    if(prices){ recordSnapshot(); }
+    if(prices){ recordSnapshot(); updateDayRef(); }
     renderAll();
     if(prices){ checkAlerts(); setStatus('ok'); if(!silent) toast('Prix mis à jour','ok'); }
     else{ setStatus(state.online?'stale':'off'); if(!silent) toast('API injoignable — données en cache','err'); }
@@ -1009,23 +1009,36 @@ function animateMoney(el,toUsd,digits){
 }
 
 /* daily change from snapshots (fallback session) */
-function metalPrevPrice(m){
-  const today=new Date().toISOString().slice(0,10);
+// Référence quotidienne (clôture de la veille) figée pour la journée, stockée localement.
+// La variation « aujourd'hui » = prix actuel vs cette référence → se met à jour en direct à chaque refresh.
+function todayStr(){ try{ return new Date().toLocaleDateString('en-CA'); }catch(e){ return new Date().toISOString().slice(0,10); } }
+function prevDayClose(m){
+  const t=todayStr();
   for(let i=state.snapshots.length-1;i>=0;i--){ const s=state.snapshots[i];
-    if(s.p && typeof s.p[m]==='number' && new Date(s.t).toISOString().slice(0,10)!==today){ if(s.p[m]>0) return s.p[m]; break; } }
-  const pp=state.prevPrices[m]; if(typeof pp==='number'&&pp>0) return pp;
+    if(s.p && typeof s.p[m]==='number' && s.p[m]>0){ let d=''; try{ d=new Date(s.t).toLocaleDateString('en-CA'); }catch(e){} if(d&&d!==t) return s.p[m]; } }
   return null;
 }
+function updateDayRef(){
+  const t=todayStr(); let ref=null; try{ ref=JSON.parse(localStorage.getItem('mv_dayRef')||'null'); }catch(e){}
+  if(ref && ref.date===t && ref.prices) return ref;
+  const prices={};
+  for(const m of METAL_ORDER){ const pc=prevDayClose(m), cur=spotUsd(m); const base=(pc!=null&&pc>0)?pc:(cur>0?cur:0); if(base>0) prices[m]=base; }
+  if(!Object.keys(prices).length) return ref;           // aucun prix connu → on réessaiera au prochain refresh
+  ref={date:t,prices}; try{ localStorage.setItem('mv_dayRef',JSON.stringify(ref)); }catch(e){}
+  return ref;
+}
+function dayRefPrices(){ try{ const r=JSON.parse(localStorage.getItem('mv_dayRef')||'null'); return (r&&r.prices)?r.prices:null; }catch(e){ return null; } }
 function metalDayChange(m){
   const cur=spotUsd(m); if(!(cur>0)) return null;
-  const prev=metalPrevPrice(m); if(prev==null||!(prev>0)||Math.abs(cur-prev)<1e-9) return null;
-  return (cur-prev)/prev*100;
+  const rp=dayRefPrices(); const bp=rp&&rp[m]; if(!(bp>0)) return null;
+  return (cur-bp)/bp*100;
 }
 function portfolioDayChange(){
-  let now=0,prev=0,have=false;
-  for(const m of METAL_ORDER){ const t=metalTotals(m); if(!(t.qty>0)) continue; const cur=spotUsd(m); if(!(cur>0)) continue;
-    const pp=metalPrevPrice(m); if(pp==null||!(pp>0)) continue; now+=t.qty*cur; prev+=t.qty*pp; have=true; }
-  if(!have||prev<=0) return null; return {abs:now-prev, pct:(now-prev)/prev*100};
+  const rp=dayRefPrices(); if(!rp) return null;
+  let now=0,base=0,have=false;
+  for(const m of METAL_ORDER){ const t=metalTotals(m); if(!(t.qty>0)) continue; const cur=spotUsd(m), bp=rp[m];
+    if(!(cur>0)||!(bp>0)) continue; now+=t.qty*cur; base+=t.qty*bp; have=true; }
+  if(!have||base<=0) return null; return {abs:now-base, pct:(now-base)/base*100};
 }
 function miniSpark(m){
   const pts=state.snapshots.filter(s=>s.p&&typeof s.p[m]==='number').slice(-30).map(s=>s.p[m]);
@@ -2011,6 +2024,7 @@ async function downloadMissing(remoteMeta){ if(!(supaReady&&supaUser)||!Array.is
 /* ---- boot ---- */
 $('#curLabel').textContent=state.currency;
 $('#footVer').textContent=APP_VERSION;
+updateDayRef();
 renderAll();
 loadInvoices();
 initSupabase();
