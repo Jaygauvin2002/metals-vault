@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1852,9 +1852,15 @@ $('#expJson').addEventListener('click',()=>{ const data={app:'metals-vault',vers
   investments:state.investments,alerts:state.alerts,snapshots:state.snapshots,lastPrices:state.prices};
   download(`metals-vault-${stamp()}.json`,JSON.stringify(data,null,2),'application/json'); toast('Sauvegarde JSON exportée','ok'); });
 $('#expCsv').addEventListener('click',()=>{ if(!state.investments.length){ toast('Aucune position à exporter','err'); return; }
-  const head=['id','type','metal','nom','quantite_oz','prix_usd_oz','prime_usd_oz','montant_usd','date','note'];
-  const rows=state.investments.map(p=>{ const q=+p.qty||0,pr=+p.price||0,pm=+p.premium||0;
-    return [p.id,isSell(p)?'vente':'achat',p.metal,METALS[p.metal].name,q,pr,pm,((pr+pm)*q).toFixed(2),p.date||'','"'+String(p.note||'').replace(/"/g,'""')+'"'].join(','); });
+  const esc=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['id','type','metal','nom','nb_pieces','poids_oz_par_piece','poids_total_oz','prix_usd_oz','prime_usd_oz','cout_total_usd','vendu','date_vente','montant_vente_usd','gain_realise_usd','date','note','details'];
+  const rows=state.investments.map(p=>{ const q=+p.qty||0,pr=+p.price||0,pm=+p.premium||0,pieces=Math.max(1,Math.round(+p.pieces||1));
+    const perPiece=pieces>0?q/pieces:q, cost=(pr+pm)*q, sold=!!p.sold, soldTot=+p.soldTotal||0;
+    const details=(p.details||[]).map(d=>d.k+': '+d.v).join(' | ');
+    return [p.id, isSell(p)?'vente':(sold?'vendu':'achat'), p.metal, esc(METALS[p.metal]?METALS[p.metal].name:p.metal),
+      pieces, perPiece.toFixed(4), q.toFixed(4), pr.toFixed(2), pm.toFixed(2), cost.toFixed(2),
+      sold?'oui':'non', sold?(p.soldDate||''):'', sold?soldTot.toFixed(2):'', sold?(soldTot-cost).toFixed(2):'',
+      p.date||'', esc(p.note||''), esc(details)].join(','); });
   download(`metals-vault-${stamp()}.csv`,head.join(',')+'\n'+rows.join('\n'),'text/csv'); toast('CSV exporté','ok'); });
 $('#impJsonBtn').addEventListener('click',()=>$('#fileIn').click());
 $('#fileIn').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
