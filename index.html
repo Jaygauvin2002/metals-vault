@@ -721,7 +721,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1715,7 +1715,13 @@ function updatePosUI(){
   updatePosCalc();
 }
 function updateSoldFields(){ $('#soldFields').style.display = ($('#fSold').checked && selType==='buy')?'':'none'; }
-$('#fSold').addEventListener('change',()=>{ updateSoldFields(); updatePosCalc(); if($('#fSold').checked&&!$('#fSoldDate').value) $('#fSoldDate').value=new Date().toISOString().slice(0,10); });
+$('#fSold').addEventListener('change',()=>{ updateSoldFields();
+  if($('#fSold').checked){
+    if(!$('#fSoldDate').value) $('#fSoldDate').value=new Date().toISOString().slice(0,10);
+    if(!(+$('#fSoldTotal').value>0)){ const e=readPosInputs(), spot=spotUsd(selMetal);   // pré-remplir avec la valeur marché actuelle
+      if(e.qtyOz>0&&spot>0){ const v=usdToCur(e.qtyOz*spot,$('#fSoldCur').value); $('#fSoldTotal').value=Math.round(v*100)/100; } }
+  }
+  updatePosCalc(); });
 ['#fSoldTotal'].forEach(s=>$(s).addEventListener('input',updatePosCalc));
 function updatePosCalc(){
   const e=readPosInputs(), spot=spotUsd(selMetal); let html='';
