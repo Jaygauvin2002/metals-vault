@@ -707,7 +707,7 @@
 /* ============================================================
    Metals Vault — logique (vanilla JS, fichier unique)
    ============================================================ */
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 const K = { inv:'mv_investments', al:'mv_alerts', snap:'mv_snapshots', last:'mv_lastPrices', fx:'mv_fx', cur:'mv_currency', tax:'mv_taxRate' };
 // Clés dont un changement déclenche une synchro cloud (les snapshots voyagent avec, sans déclencher à chaque prix)
 const SYNC_KEYS = [K.inv, K.al, K.cur, K.tax, 'mv_taxMarginal', 'mv_ratioA', 'mv_ratioB'];
@@ -1139,12 +1139,12 @@ function renderHomeData(p){
   let perf='<section class="hcol"><h2 class="sec">Performance par métal</h2><div class="card">';
   for(const {m,t} of held){
     const pl=t.value-t.cost, pct=t.cost>0?pl/t.cost*100:0, up=pl>=0;
-    const w=Math.min(100,t.cost>0?t.value/t.cost*100:100), base=Math.min(100, t.cost>0? (t.value>=t.cost?100:100):100);
-    // barre : fond = coût (100%), remplissage = valeur relative au coût (peut dépasser -> capé visuel)
     const fill=t.cost>0?Math.min(140,t.value/t.cost*100):100;
+    const dc=metalDayChange(m);
+    const dcTag=dc!=null?` <span class="chg ${dc>=0?'up':'down'}" style="font-size:10.5px;font-weight:600">${dc>=0?'▲':'▼'}${fmtNum(Math.abs(dc),2)}% auj.</span>`:'';
     perf+=`<div class="cv">
       <div class="top"><div class="badge ${m}" style="width:30px;height:30px;border-radius:9px;font-size:12px">${METALS[m].ab}</div>
-        <div class="nm">${METALS[m].name}</div><div class="pl ${up?'chg up':'chg down'}">${fmtPct(pct)}</div></div>
+        <div class="nm">${METALS[m].name}${dcTag}</div><div class="pl ${up?'chg up':'chg down'}">${fmtPct(pct)}</div></div>
       <div class="bar"><i style="width:${Math.min(100,fill)}%;background:${up?'linear-gradient(90deg,#2fb488,#3ad6a0)':'linear-gradient(90deg,#e0555d,#ff6f78)'}"></i></div>
       <div class="lab"><span>Coût ${fmtMoney(t.cost)} · ${fmtOz(t.qty)} oz (${weightLabel(t.qty)}) @ ${fmtMoney(t.avg,{digits:t.avg<5?3:2})}/oz</span><span>Valeur ${fmtMoney(t.value)}</span></div>
     </div>`;
@@ -1199,7 +1199,10 @@ function renderPositions(){
   if(!active.length) card.innerHTML='<div class="card">'+emptyBlock(posQuery?'🔍':'▤', posQuery?'Aucun résultat':'Aucune position détenue', posQuery?'Aucune position ne correspond à « '+escapeHtml(posQuery)+' ».':(soldLots.length?'Toutes vos positions sont vendues.':'Ajoutez votre premier achat.'))+'</div>';
   for(const p of active) card.appendChild(posRowEl(p));
   const sec=$('#soldSection'), sc=$('#soldCard');
-  if(soldLots.length){ sec.style.display=''; $('#soldCount').textContent=soldLots.length+' vendue(s)'; sc.innerHTML=''; for(const p of soldLots) sc.appendChild(posRowEl(p)); }
+  if(soldLots.length){ sec.style.display='';
+    const realized=soldLots.reduce((s,p)=>s+((+p.soldTotal||0)-lotCost(p)),0);
+    $('#soldCount').textContent=soldLots.length+' vendue(s) · réalisé '+fmtMoney(realized);
+    sc.innerHTML=''; for(const p of soldLots) sc.appendChild(posRowEl(p)); }
   else sec.style.display='none';
 }
 function posRowEl(p){
